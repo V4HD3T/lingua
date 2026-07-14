@@ -30,6 +30,11 @@ export function NavBar() {
             Courses
           </NavLink>
           {user && (
+            <NavLink to="/progress" className={linkClass}>
+              Progress
+            </NavLink>
+          )}
+          {user && (
             <NavLink to="/history" className={linkClass}>
               History
             </NavLink>

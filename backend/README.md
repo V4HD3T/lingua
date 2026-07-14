@@ -1,9 +1,10 @@
 # Backend — AI Translation and Language Learning Platform
 
-**Version:** 0.0.2
+**Version:** 0.0.3
 
 A REST API written with FastAPI + SQLModel. Includes authentication,
-real-time translation, and course/lesson/vocabulary/quiz modules.
+real-time translation, course/lesson/vocabulary and quiz modules, and
+progress/streak tracking.
 
 ## Setup
 
@@ -35,9 +36,10 @@ data is added (5 languages, 1 course, 1 lesson, 2 vocabulary items, 1 quiz).
 pytest -v
 ```
 
-Covers authentication, translation (anonymous + registered user), and
-quiz flows. The tests use an isolated in-memory SQLite database and don't
-touch the real `app.db` file.
+30 tests; covers authentication, translation (anonymous + registered user),
+lesson/course flows, quizzes, and progress/streak calculation. The tests use
+an isolated in-memory SQLite database and don't touch the real `app.db`
+file.
 
 ## Switching to the real translation model
 
@@ -55,7 +57,10 @@ USE_MOCK_TRANSLATION=false
 ```
 
 On the first request, the `facebook/nllb-200-distilled-600M` model is
-downloaded automatically (~2.4 GB, requires an internet connection).
+downloaded automatically (~2.4 GB, requires an internet connection). This
+single model supports 200+ languages on its own; add any languages you need
+to the `NLLB_LANGUAGE_CODES` dictionary in
+`app/services/translation_service.py`.
 
 ## Project structure
 
@@ -72,9 +77,10 @@ app/
   routers/
     auth.py          /auth/register, /auth/login, /auth/me
     translate.py     /translate, /translate/history, /languages
-    courses.py       /courses, /courses/{id}/lessons, /lessons/{id}/vocabulary
+    courses.py       /courses, /courses/{id}/lessons, /lessons/{id}, /lessons/{id}/vocabulary
     quizzes.py       /quizzes/{id}, /quizzes/{id}/submit, /lessons/{id}/quiz
-tests/               pytest test suite
+    stats.py         /users/me/stats (streak, progress, overall statistics)
+tests/               pytest test suite (30 tests)
 ```
 
 ## Authentication flow
@@ -85,4 +91,5 @@ tests/               pytest test suite
 
 The `/translate` endpoint deliberately supports both anonymous and
 logged-in use: without a token, translation still works but isn't saved to
-history; with a token, it is saved.
+history; with a token, it is saved. This is a typical design for a "try it
+without registering, see your history once you create an account" flow.

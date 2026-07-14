@@ -27,9 +27,11 @@ export interface Course {
 
 export interface Lesson {
   id: number;
+  course_id: number;
   title: string;
   content: string;
   order: number;
+  language_code: string;
 }
 
 export interface VocabularyItem {
@@ -56,4 +58,21 @@ export interface QuizResult {
   score: number;
   total_questions: number;
   correct_count: number;
+}
+
+export interface CourseProgress {
+  course_id: number;
+  course_title: string;
+  total_lessons: number;
+  completed_lessons: number;
+  completion_percentage: number;
+}
+
+export interface UserStats {
+  current_streak: number;
+  longest_streak: number;
+  total_translations: number;
+  total_quiz_attempts: number;
+  average_quiz_score: number;
+  courses: CourseProgress[];
 }

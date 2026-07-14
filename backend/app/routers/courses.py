@@ -10,6 +10,18 @@ from app.schemas import CourseRead, LessonRead, VocabularyRead
 router = APIRouter(tags=["courses"])
 
 
+def _build_lesson_read(lesson: Lesson, session: Session) -> LessonRead:
+    course = session.get(Course, lesson.course_id)
+    return LessonRead(
+        id=lesson.id,
+        course_id=lesson.course_id,
+        title=lesson.title,
+        content=lesson.content,
+        order=lesson.order,
+        language_code=course.language_code if course else "",
+    )
+
+
 @router.get("/courses", response_model=List[CourseRead])
 def list_courses(session: Session = Depends(get_session)):
     return session.exec(select(Course)).all()
@@ -25,9 +37,18 @@ def get_course(course_id: int, session: Session = Depends(get_session)):
 
 @router.get("/courses/{course_id}/lessons", response_model=List[LessonRead])
 def list_lessons(course_id: int, session: Session = Depends(get_session)):
-    return session.exec(
+    lessons = session.exec(
         select(Lesson).where(Lesson.course_id == course_id).order_by(Lesson.order)
     ).all()
+    return [_build_lesson_read(lesson, session) for lesson in lessons]
+
+
+@router.get("/lessons/{lesson_id}", response_model=LessonRead)
+def get_lesson(lesson_id: int, session: Session = Depends(get_session)):
+    lesson = session.get(Lesson, lesson_id)
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    return _build_lesson_read(lesson, session)
 
 
 @router.get("/lessons/{lesson_id}/vocabulary", response_model=List[VocabularyRead])

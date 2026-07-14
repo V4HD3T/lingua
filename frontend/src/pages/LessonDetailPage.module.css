@@ -16,11 +16,30 @@
   color: var(--ink-900);
 }
 
+.sectionLabel {
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-5);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.speechError {
+  background: var(--error-100);
+  color: var(--error-500);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: var(--space-4);
+}
+
 .vocabList {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  margin-top: var(--space-5);
 }
 
 .vocabCard {
@@ -32,15 +51,30 @@
 
 .vocabHead {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
+}
+
+.feedbackCorrect {
+  margin-top: var(--space-3);
+  color: var(--success-500);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.feedbackIncorrect {
+  margin-top: var(--space-3);
+  color: var(--error-500);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .word {
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 17px;
+  margin-right: var(--space-3);
 }
 
 .translation {

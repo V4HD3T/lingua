@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listLanguages, translateText } from "../api/translate";
 import { useAuth } from "../context/AuthContext";
+import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
+import { MicButton } from "../components/MicButton";
 import type { Language } from "../types";
 import styles from "./TranslatePage.module.css";
 
@@ -19,6 +21,8 @@ export function TranslatePage() {
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestIdRef = useRef(0);
+
+  const speech = useSpeechRecognition();
 
   useEffect(() => {
     listLanguages()
@@ -72,6 +76,15 @@ export function TranslatePage() {
     setTargetLang(sourceLang);
     setSourceText(translatedText);
     setTranslatedText(sourceText);
+  }
+
+  async function handleMicClick() {
+    try {
+      const transcript = await speech.listen(sourceLang);
+      setSourceText((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    } catch {
+      // the error is already surfaced via speech.error, nothing more to do here
+    }
   }
 
   function languageName(code: string): string {
@@ -131,11 +144,16 @@ export function TranslatePage() {
           <div className={styles.column}>
             <textarea
               className={styles.textarea}
-              placeholder={`Type something in ${languageName(sourceLang)}...`}
+              placeholder={`Type or say something in ${languageName(sourceLang)}...`}
               value={sourceText}
               onChange={(e) => setSourceText(e.target.value)}
               rows={8}
             />
+            {speech.isSupported && (
+              <div className={styles.micWrapper}>
+                <MicButton isListening={speech.isListening} onClick={handleMicClick} />
+              </div>
+            )}
           </div>
 
           <div className={styles.column}>
@@ -153,7 +171,9 @@ export function TranslatePage() {
           </div>
         </div>
 
-        {error && <p className={styles.errorText}>{error}</p>}
+        {(error || speech.error) && (
+          <p className={styles.errorText}>{error ?? speech.error}</p>
+        )}
 
         <div className={styles.footerRow}>
           {savedNotice && !error ? (

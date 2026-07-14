@@ -1,0 +1,160 @@
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-7) var(--space-5) var(--space-8);
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-6);
+}
+
+.streakCard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  background: var(--ink-900);
+  color: var(--paper-0);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5) var(--space-6);
+  margin-bottom: var(--space-5);
+}
+
+.flameIcon {
+  color: var(--accent-500);
+  flex-shrink: 0;
+}
+
+.streakNumber {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 700;
+  margin-right: var(--space-2);
+}
+
+.streakLabel {
+  font-size: 15px;
+  color: var(--paper-50);
+}
+
+.streakBest {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--accent-100);
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-7);
+}
+
+.statCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  text-align: center;
+}
+
+.statNumber {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+
+.statLabel {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.sectionTitle {
+  margin-bottom: var(--space-4);
+}
+
+.courseList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.courseCard {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+  text-decoration: none;
+  color: inherit;
+}
+
+.courseCard:hover {
+  border-color: var(--accent-500);
+}
+
+.courseHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: var(--space-2);
+}
+
+.courseTitle {
+  font-weight: 500;
+  font-size: 15px;
+}
+
+.coursePercentage {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--accent-600);
+}
+
+.progressTrack {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--paper-50);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--accent-500);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.courseDetail {
+  display: block;
+  margin-top: var(--space-2);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.empty {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+@media (max-width: 560px) {
+  .statGrid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-2);
+  }
+  .streakBest {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressFill {
+    transition: none;
+  }
+}

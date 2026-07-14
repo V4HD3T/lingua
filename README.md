@@ -1,6 +1,6 @@
 # Lingua — AI Translation and Language Learning Platform
 
-**Version:** 0.0.2
+**Version:** 0.0.3
 
 A platform offering real-time translation and interactive language
 learning for multilingual users. Built as part of a university graduation
@@ -33,12 +33,15 @@ npm run dev
 ```
 → http://localhost:5173
 
-See `backend/README.md` and `frontend/README.md` for detailed instructions.
+See `backend/README.md` and `frontend/README.md` for detailed instructions
+and architecture notes.
 
 ## Status
 
-- ✅ Backend: authentication, translation, courses/lessons/vocabulary, quizzes
+- ✅ Backend: authentication, translation, courses/lessons/vocabulary, quizzes, progress/streak — 30 tests passing
 - ✅ Frontend: a working interface for every flow (React + TypeScript)
-- ⏳ Up next: speech recognition, progress tracking, the real NLLB model, content expansion
+- ✅ Speech recognition: voice input for translation + pronunciation practice (browser-based, no model download)
+- ✅ Progress tracking: daily streak, per-course completion percentage (`/progress`)
+- ⏳ Up next: the real NLLB model (needs to be set up locally), content expansion, end-to-end testing
 
 (Full roadmap: `ARCHITECTURE.md` §6)

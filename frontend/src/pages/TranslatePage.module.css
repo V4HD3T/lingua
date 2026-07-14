@@ -72,10 +72,17 @@
 
 .column {
   min-height: 220px;
+  position: relative;
 }
 
 .column:first-child {
   border-right: 1px solid var(--border);
+}
+
+.micWrapper {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
 }
 
 .textarea {
@@ -85,6 +92,7 @@
   border: none;
   resize: none;
   padding: var(--space-5);
+  padding-right: var(--space-8);
   font-size: 17px;
   line-height: 1.6;
   background: transparent;

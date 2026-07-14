@@ -13,6 +13,10 @@ export function listLessons(courseId: number): Promise<Lesson[]> {
   return apiRequest<Lesson[]>(`/courses/${courseId}/lessons`);
 }
 
+export function getLesson(lessonId: number): Promise<Lesson> {
+  return apiRequest<Lesson>(`/lessons/${lessonId}`);
+}
+
 export function listVocabulary(lessonId: number): Promise<VocabularyItem[]> {
   return apiRequest<VocabularyItem[]>(`/lessons/${lessonId}/vocabulary`);
 }

@@ -50,9 +50,11 @@ class CourseRead(BaseModel):
 
 class LessonRead(BaseModel):
     id: int
+    course_id: int
     title: str
     content: str
     order: int
+    language_code: str
 
 
 class VocabularyRead(BaseModel):
@@ -83,3 +85,20 @@ class QuizResult(BaseModel):
     score: float
     total_questions: int
     correct_count: int
+
+
+class CourseProgress(BaseModel):
+    course_id: int
+    course_title: str
+    total_lessons: int
+    completed_lessons: int
+    completion_percentage: float
+
+
+class UserStats(BaseModel):
+    current_streak: int
+    longest_streak: int
+    total_translations: int
+    total_quiz_attempts: int
+    average_quiz_score: float
+    courses: List[CourseProgress]
