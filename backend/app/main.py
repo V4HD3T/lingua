@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 from app.config import settings
 from app.database import engine, init_db
 from app.models import Course, Language, Lesson, Quiz, QuizQuestion, VocabularyItem
-from app.routers import auth, courses, quizzes, review, stats, translate
+from app.routers import auth, courses, quizzes, review, stats, suggestions, translate
 
 
 def seed_data(session: Session) -> None:
@@ -103,6 +103,7 @@ app.include_router(courses.router)
 app.include_router(quizzes.router)
 app.include_router(stats.router)
 app.include_router(review.router)
+app.include_router(suggestions.router)
 
 
 @app.get("/health", tags=["system"])

@@ -11,6 +11,58 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.0.5] — AI / translation engine, remaining items
+
+Completes the "AI / translation engine" topic. Four items:
+
+- **Translation confidence + alternative translations** (`POST
+  /translate` now also returns `confidence` and `alternatives`):
+  - `TranslationService` gained a `translate_detailed()` method.
+    `NLLBTranslationService`'s version is written against the real
+    beam-search generation API (`num_return_sequences`,
+    `output_scores=True`) for genuine alternatives and a real confidence
+    score — **written but not executable in this sandbox** (no network
+    access to huggingface.co; confirmed again with `curl`, which returns
+    `x-deny-reason: host_not_allowed`), so it needs a quick sanity check
+    against your installed `transformers` version once it's runnable.
+  - `MockTranslationService`'s version returns clearly-documented
+    illustrative placeholders (a text-length heuristic, a trivial
+    formatting variant) — the frontend badge says "confidence" but its
+    tooltip is upfront that this is a mock value.
+- **Contextual / idiomatic-phrase warnings** (`idiom_warnings` field on
+  the same `/translate` response):
+  - A small hand-curated dictionary per language (5 languages, ~4-5
+    idioms each), matched by case-insensitive substring search —
+    deliberately simple and fully deterministic, not a trained classifier.
+  - Dictionary entries use the idiom's stable, non-conjugating core (e.g.
+    Spanish "en las nubes" rather than "estar en las nubes") so they still
+    match conjugated real-world usage.
+- **Personalized vocabulary suggestions** (`GET
+  /users/me/vocabulary-suggestions`):
+  - Counts words from the user's own `TranslationHistory` that also
+    appear in the app's vocabulary catalogue, excluding anything they've
+    already started reviewing. The one feature that actually connects the
+    translate and learn modules rather than leaving them side by side.
+  - Caught and fixed a real bug during testing: the mock translation
+    service echoes the source text into its fake "translation," which was
+    silently double-counting word frequency. Fixed by counting per-record
+    presence (a set per translation, unioned into the counter) instead of
+    raw token occurrences — also just a more correct design regardless of
+    mock vs. real translation.
+  - Shown on the `/progress` page as "Picked up from your translations."
+- **Real NLLB integration**: confirmed (again, empirically, not from
+  memory) that this sandbox cannot reach huggingface.co. Everything that
+  *can* be done without actually running the model is done: the real
+  service class, its detailed-translation method, and setup docs are all
+  in place and ready to switch on (`USE_MOCK_TRANSLATION=false` +
+  `pip install transformers torch sentencepiece`) — actually exercising it
+  is queued for a session on your own machine.
+- 16 new tests (67 total). Two genuine bugs were caught and fixed by the
+  new tests themselves before this was called done (an idiom dictionary
+  entry that couldn't match conjugated Turkish text, and the frequency
+  double-counting bug above) — both described in more detail in the
+  relevant test files.
+
 ## [0.0.4] — Automatic language detection, text-to-speech, spaced repetition
 
 - **Automatic language detection** (`POST /detect-language`, `langid` library):

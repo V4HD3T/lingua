@@ -5,7 +5,7 @@ import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "../hooks/useSpeechSynthesis";
 import { MicButton } from "../components/MicButton";
 import { SpeakerButton } from "../components/SpeakerButton";
-import type { Language } from "../types";
+import type { IdiomWarning, Language } from "../types";
 import styles from "./TranslatePage.module.css";
 
 const DEBOUNCE_MS = 400;
@@ -23,6 +23,9 @@ export function TranslatePage() {
   const [targetLang, setTargetLang] = useState("es");
   const [sourceText, setSourceText] = useState("");
   const [translatedText, setTranslatedText] = useState("");
+  const [confidence, setConfidence] = useState<number | null>(null);
+  const [alternatives, setAlternatives] = useState<string[]>([]);
+  const [idiomWarnings, setIdiomWarnings] = useState<IdiomWarning[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState(false);
@@ -44,6 +47,9 @@ export function TranslatePage() {
     async (text: string, from: string, to: string) => {
       if (!text.trim()) {
         setTranslatedText("");
+        setConfidence(null);
+        setAlternatives([]);
+        setIdiomWarnings([]);
         setIsTranslating(false);
         setDetected(null);
         return;
@@ -68,6 +74,9 @@ export function TranslatePage() {
         const result = await translateText(text, resolvedFrom, to);
         if (currentRequestId !== requestIdRef.current) return;
         setTranslatedText(result.translated_text);
+        setConfidence(result.confidence);
+        setAlternatives(result.alternatives.filter((a) => a !== result.translated_text));
+        setIdiomWarnings(result.idiom_warnings);
         setSavedNotice(Boolean(user));
       } catch {
         if (currentRequestId !== requestIdRef.current) return;
@@ -190,6 +199,15 @@ export function TranslatePage() {
                 <MicButton isListening={speech.isListening} onClick={handleMicClick} />
               </div>
             )}
+            {idiomWarnings.length > 0 && (
+              <div className={styles.idiomBox}>
+                {idiomWarnings.map((warning) => (
+                  <p key={warning.phrase} className={styles.idiomEntry}>
+                    <strong>"{warning.phrase}"</strong> is idiomatic — {warning.note}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className={styles.column}>
@@ -215,6 +233,21 @@ export function TranslatePage() {
                   }
                   title="Listen to the translation"
                 />
+              </div>
+            )}
+            {translatedText && confidence !== null && (
+              <div className={styles.confidenceRow}>
+                <span
+                  className={styles.confidenceBadge}
+                  title="Mock translation service — this is an illustrative placeholder, not a real model confidence score. See CHANGELOG.md."
+                >
+                  {Math.round(confidence * 100)}% confidence
+                </span>
+                {alternatives.length > 0 && (
+                  <span className={styles.alternativesInline}>
+                    also: {alternatives.join(" · ")}
+                  </span>
+                )}
               </div>
             )}
           </div>

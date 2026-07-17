@@ -1,10 +1,19 @@
 # Frontend — Lingua
 
-**Version:** 0.0.4
+**Version:** 0.0.5
 
 A single-page app built with Vite + React + TypeScript. Consumes the
 backend's authentication, translation (with language detection), course/
 lesson/vocabulary, quiz, spaced-repetition review, and progress endpoints.
+
+## What's new in 0.0.5
+
+- Translate page now shows a **confidence badge** and any **alternative
+  translations** next to the output, plus an **idiom warning** box under
+  the source text when a known idiomatic phrase is detected.
+- `/progress` gained a **"Picked up from your translations"** section:
+  words you've translated repeatedly that you haven't started formally
+  learning yet, linking straight to the relevant lesson.
 
 ## What's new in 0.0.4
 

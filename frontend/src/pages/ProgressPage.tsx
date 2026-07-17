@@ -1,18 +1,23 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchMyStats } from "../api/stats";
+import { getVocabularySuggestions } from "../api/suggestions";
 import { LoadingState, ErrorState } from "../components/StatusMessage";
-import type { UserStats } from "../types";
+import type { UserStats, VocabularySuggestion } from "../types";
 import styles from "./ProgressPage.module.css";
 
 export function ProgressPage() {
   const [stats, setStats] = useState<UserStats | null>(null);
+  const [suggestions, setSuggestions] = useState<VocabularySuggestion[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMyStats()
       .then(setStats)
       .catch(() => setError("Something went wrong loading your progress."));
+    getVocabularySuggestions()
+      .then(setSuggestions)
+      .catch(() => setSuggestions([])); // non-critical widget, fail quietly
   }, []);
 
   return (
@@ -63,6 +68,33 @@ export function ProgressPage() {
               <span className={styles.statLabel}>average score</span>
             </div>
           </div>
+
+          {suggestions && suggestions.length > 0 && (
+            <>
+              <h2 className={styles.sectionTitle}>Picked up from your translations</h2>
+              <p className={styles.suggestionIntro}>
+                You've translated these words more than once — worth adding to your
+                vocabulary practice?
+              </p>
+              <div className={styles.suggestionList}>
+                {suggestions.map((s) => (
+                  <Link
+                    key={s.vocabulary_item_id}
+                    to={`/lessons/${s.lesson_id}`}
+                    className={styles.suggestionCard}
+                  >
+                    <div>
+                      <span className={styles.suggestionWord}>{s.word}</span>
+                      <span className={styles.suggestionTranslation}>{s.translation}</span>
+                    </div>
+                    <span className={styles.suggestionFrequency}>
+                      seen {s.frequency}×
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </>
+          )}
 
           <h2 className={styles.sectionTitle}>Courses</h2>
           <div className={styles.courseList}>

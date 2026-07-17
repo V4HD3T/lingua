@@ -9,10 +9,12 @@ from app.routers.auth import get_current_user, get_current_user_optional
 from app.schemas import (
     DetectLanguageRequest,
     DetectLanguageResponse,
+    IdiomWarning,
     LanguageRead,
     TranslateRequest,
     TranslateResponse,
 )
+from app.services.idiom_detection import find_idioms
 from app.services.language_detection import detect_language
 from app.services.translation_service import TranslationService, get_translation_service
 
@@ -46,15 +48,21 @@ def translate_text(
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """Translates text in real time. If logged in, it's saved to history;
-    if not (anonymous use), only the translation result is returned."""
-    translated = service.translate(payload.text, payload.source_lang, payload.target_lang)
+    if not (anonymous use), only the translation result is returned.
+
+    Also returns a confidence score, up to a couple of alternative
+    translations, and any idiom warnings matched in the source text --
+    see translation_service.py and idiom_detection.py for how each of
+    those is actually computed (and their honest limitations)."""
+    detail = service.translate_detailed(payload.text, payload.source_lang, payload.target_lang)
+    idioms = find_idioms(payload.text, payload.source_lang)
 
     if current_user is not None:
         record = TranslationHistory(
             user_id=current_user.id,
             source_text=payload.text,
             source_lang=payload.source_lang,
-            target_text=translated,
+            target_text=detail.translated_text,
             target_lang=payload.target_lang,
         )
         session.add(record)
@@ -62,9 +70,12 @@ def translate_text(
 
     return TranslateResponse(
         source_text=payload.text,
-        translated_text=translated,
+        translated_text=detail.translated_text,
         source_lang=payload.source_lang,
         target_lang=payload.target_lang,
+        confidence=detail.confidence,
+        alternatives=detail.alternatives,
+        idiom_warnings=[IdiomWarning(phrase=i.phrase, note=i.note) for i in idioms],
     )
 
 

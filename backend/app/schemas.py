@@ -29,11 +29,19 @@ class TranslateRequest(BaseModel):
     target_lang: str
 
 
+class IdiomWarning(BaseModel):
+    phrase: str
+    note: str
+
+
 class TranslateResponse(BaseModel):
     source_text: str
     translated_text: str
     source_lang: str
     target_lang: str
+    confidence: float = 1.0
+    alternatives: List[str] = []
+    idiom_warnings: List[IdiomWarning] = []
 
 
 class LanguageRead(BaseModel):
@@ -135,3 +143,11 @@ class ReviewResult(BaseModel):
     ease_factor: float
     interval_days: int
     next_review_date: date
+
+
+class VocabularySuggestionRead(BaseModel):
+    vocabulary_item_id: int
+    word: str
+    translation: str
+    lesson_id: int
+    frequency: int

@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_name: str = "AI Translation and Language Learning Platform"
-    app_version: str = "0.0.4"
+    app_version: str = "0.0.5"
     database_url: str = "sqlite:///./app.db"
 
     secret_key: str = "change-this-for-development"

@@ -10,11 +10,19 @@ export interface Language {
   name: string;
 }
 
+export interface IdiomWarning {
+  phrase: string;
+  note: string;
+}
+
 export interface TranslateResult {
   source_text: string;
   translated_text: string;
   source_lang: string;
   target_lang: string;
+  confidence: number;
+  alternatives: string[];
+  idiom_warnings: IdiomWarning[];
 }
 
 export interface Course {
@@ -93,4 +101,12 @@ export interface ReviewResult {
   ease_factor: number;
   interval_days: number;
   next_review_date: string;
+}
+
+export interface VocabularySuggestion {
+  vocabulary_item_id: number;
+  word: string;
+  translation: string;
+  lesson_id: number;
+  frequency: number;
 }

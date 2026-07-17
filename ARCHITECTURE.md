@@ -1,6 +1,6 @@
 # AI-Based Automatic Translation and Language Learning Platform
 
-**Version:** 0.0.4
+**Version:** 0.0.5
 
 An integrated platform offering real-time translation and interactive
 language learning (quizzes + vocabulary + speaking practice) for
@@ -10,9 +10,11 @@ multilingual users.
 
 - Transformer-based translation engine (NLLB-200 — 200+ languages, single model)
 - Automatic source-language detection
+- Translation confidence scores, alternative translations, and idiom warnings
 - Interactive quiz system (multiple choice, automatic scoring)
 - Course → lesson → vocabulary hierarchy
 - Spaced repetition (SM-2) for vocabulary review
+- Personalized vocabulary suggestions drawn from translation history
 - User accounts, session management (JWT), translation history
 - Progress tracking: daily streak, per-course completion percentage
 - Browser-based speech recognition (dictation, pronunciation practice) and
@@ -126,7 +128,7 @@ this environment)
   stat tiles, and per-course progress bars. "Progress" link in the NavBar
   (visible when logged in).
 
-Backend: **51 tests passing**. See `backend/README.md` and
+Backend: **67 tests passing**. See `backend/README.md` and
 `frontend/README.md` for setup and run instructions.
 
 **v0.0.4 — Automatic language detection, text-to-speech, spaced
@@ -147,6 +149,26 @@ list of every version's changes)
   flashcard-style `/review` page (reveal → rate Again/Good/Easy).
 - 24 new tests (51 total), all three features verified live end-to-end.
 
+**v0.0.5 — AI / translation engine, remaining items** ✅ (topic complete
+except running real NLLB, which needs your own machine)
+
+- `translate_detailed()` added to `TranslationService`: real
+  confidence + beam-search alternatives on `NLLBTranslationService`
+  (written, not executable here — see below); clearly-labeled
+  illustrative placeholders on `MockTranslationService`.
+- Idiom warnings: small curated dictionary per language, substring
+  matching on stable (non-conjugating) phrase stems.
+- `GET /users/me/vocabulary-suggestions`: frequency-counts the user's own
+  translation history against the vocabulary catalogue — the one feature
+  that actually connects translate and learn.
+- Re-verified empirically that this sandbox can't reach huggingface.co
+  (`curl` → `x-deny-reason: host_not_allowed`); everything else needed for
+  real NLLB is written and documented, ready for a session on your
+  machine.
+- 16 new tests (67 total) — including two real bugs the tests themselves
+  caught and fixed before this was called done (details in
+  `CHANGELOG.md`).
+
 ## 6. Roadmap
 
 | Phase | Duration | Content |
@@ -156,20 +178,16 @@ list of every version's changes)
 | 3 | ✅ Done | Speech recognition / pronunciation practice via the Web Speech API |
 | 4 | ✅ Done | Progress tracking, streak system |
 | — | ✅ Done (v0.0.4) | Automatic language detection, text-to-speech, spaced repetition |
-| 1 | pending | Real NLLB model integration (can't be tested in this environment — it needs access to huggingface.co, so this has to happen on your own machine) |
-| — | pending | Translation confidence score / alternative translations |
-| — | pending | Contextual / idiomatic-phrase warnings |
-| — | pending | Personalized vocabulary suggestions drawn from translation history |
+| — | ✅ Done (v0.0.5) | Translation confidence/alternatives, idiom warnings, personalized vocabulary suggestions |
+| 1 | pending — your machine | Real NLLB model integration (confirmed empirically: no network access to huggingface.co in this environment) |
 | 5 | pending | End-to-end testing, usability evaluation, bug fixing |
 | 6 | pending | Project report, documentation, defense presentation |
 
-Everything under "AI / translation engine" is now done except real NLLB
-integration (blocked on this environment's network access) and the three
-items above it, which are next.
+"AI / translation engine" is now fully done except real NLLB, which is
+blocked on this environment's network access rather than on remaining
+design or implementation work.
 
 ## 7. Next step
 
-From the AI/translation-engine list: confidence scores + alternative
-translations, or contextual/idiomatic warnings, or personalized vocabulary
-suggestions from translation history — which one? (Real NLLB integration
-is still queued separately, for a session on your own machine.)
+Content expansion, the end-to-end testing/usability phase, or a session on
+your own machine to actually activate real NLLB — which one?
