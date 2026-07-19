@@ -1,64 +1,20 @@
 """
 Returns the user's progress summary: daily streak, per-course completion
-percentage, and overall quiz/translation statistics.
-
-Rather than keeping a separate "streak counter" table, the streak is
-computed directly from the dates on existing TranslationHistory and
-QuizAttempt records. This removes any risk of the counter drifting out of
-sync with real activity (e.g. if a record is deleted, the counter is still
-automatically correct) — the cost is a light computation on every request,
-which is negligible at this scale.
+percentage, daily goal progress, and overall quiz/translation statistics.
 """
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
 
 from app.database import get_session
-from app.models import Course, Lesson, Quiz, QuizAttempt, TranslationHistory, User
+from app.models import Course, Lesson, Quiz, QuizAttempt, TranslationHistory, User, VocabularyProgress
 from app.routers.auth import get_current_user
 from app.schemas import CourseProgress, UserStats
+from app.services.streaks import compute_streaks, get_activity_dates
 
 router = APIRouter(tags=["stats"])
-
-
-def _activity_dates(user_id: int, session: Session) -> set[date]:
-    translation_times = session.exec(
-        select(TranslationHistory.created_at).where(TranslationHistory.user_id == user_id)
-    ).all()
-    quiz_times = session.exec(
-        select(QuizAttempt.completed_at).where(QuizAttempt.user_id == user_id)
-    ).all()
-    return {t.date() for t in translation_times} | {t.date() for t in quiz_times}
-
-
-def _compute_streaks(activity_dates: set[date]) -> tuple[int, int]:
-    if not activity_dates:
-        return 0, 0
-
-    sorted_dates = sorted(activity_dates)
-
-    longest = 1
-    current_run = 1
-    for i in range(1, len(sorted_dates)):
-        if sorted_dates[i] == sorted_dates[i - 1] + timedelta(days=1):
-            current_run += 1
-        else:
-            current_run = 1
-        longest = max(longest, current_run)
-
-    today = datetime.now(timezone.utc).date()
-    current_streak = 0
-    if sorted_dates[-1] in (today, today - timedelta(days=1)):
-        current_streak = 1
-        for i in range(len(sorted_dates) - 1, 0, -1):
-            if sorted_dates[i] - sorted_dates[i - 1] == timedelta(days=1):
-                current_streak += 1
-            else:
-                break
-
-    return current_streak, longest
 
 
 def _compute_course_progress(user_id: int, course: Course, session: Session) -> CourseProgress:
@@ -94,13 +50,23 @@ def _compute_course_progress(user_id: int, course: Course, session: Session) -> 
     )
 
 
+def _reviews_done_today(user_id: int, session: Session) -> int:
+    today = datetime.now(timezone.utc).date()
+    reviewed = session.exec(
+        select(VocabularyProgress.last_reviewed_at).where(
+            VocabularyProgress.user_id == user_id
+        )
+    ).all()
+    return sum(1 for t in reviewed if t is not None and t.date() == today)
+
+
 @router.get("/users/me/stats", response_model=UserStats)
 def get_my_stats(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    activity_dates = _activity_dates(current_user.id, session)
-    current_streak, longest_streak = _compute_streaks(activity_dates)
+    activity_dates = get_activity_dates(current_user.id, session)
+    current_streak, longest_streak = compute_streaks(activity_dates)
 
     total_translations = len(
         session.exec(
@@ -128,4 +94,6 @@ def get_my_stats(
         total_quiz_attempts=total_quiz_attempts,
         average_quiz_score=average_quiz_score,
         courses=course_progress,
+        daily_goal=current_user.daily_review_goal,
+        reviews_today=_reviews_done_today(current_user.id, session),
     )

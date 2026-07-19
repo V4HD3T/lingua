@@ -32,6 +32,8 @@ def test_get_lesson(client):
     data = response.json()
     assert data["title"] == "Greetings"
     assert data["language_code"] == "es"
+    assert "cheek kiss" in data["cultural_note"]
+    assert "tú" in data["grammar_note"]
 
 
 def test_get_missing_lesson_returns_404(client):

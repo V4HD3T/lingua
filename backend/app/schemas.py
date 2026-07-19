@@ -1,5 +1,5 @@
-from datetime import date
-from typing import Dict, List
+from datetime import date, datetime
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -16,11 +16,46 @@ class UserRead(BaseModel):
     username: str
     email: str
     native_language: str
+    daily_review_goal: int
+    is_verified: bool
 
 
 class Token(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8)
+
+
+class EmailVerificationConfirm(BaseModel):
+    token: str
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+class AchievementRead(BaseModel):
+    code: str
+    name: str
+    description: str
+    earned_at: datetime
 
 
 class TranslateRequest(BaseModel):
@@ -42,6 +77,7 @@ class TranslateResponse(BaseModel):
     confidence: float = 1.0
     alternatives: List[str] = []
     idiom_warnings: List[IdiomWarning] = []
+    new_achievements: List[AchievementRead] = []
 
 
 class LanguageRead(BaseModel):
@@ -74,6 +110,8 @@ class LessonRead(BaseModel):
     content: str
     order: int
     language_code: str
+    grammar_note: str
+    cultural_note: str
 
 
 class VocabularyRead(BaseModel):
@@ -85,14 +123,17 @@ class VocabularyRead(BaseModel):
 
 class QuizQuestionRead(BaseModel):
     id: int
+    question_type: str
     question_text: str
     options: List[str]
+    audio_text: Optional[str] = None
 
 
 class QuizRead(BaseModel):
     id: int
     title: str
     quiz_type: str
+    language_code: str
     questions: List[QuizQuestionRead]
 
 
@@ -104,6 +145,7 @@ class QuizResult(BaseModel):
     score: float
     total_questions: int
     correct_count: int
+    new_achievements: List[AchievementRead] = []
 
 
 class CourseProgress(BaseModel):
@@ -121,6 +163,8 @@ class UserStats(BaseModel):
     total_quiz_attempts: int
     average_quiz_score: float
     courses: List[CourseProgress]
+    daily_goal: int
+    reviews_today: int
 
 
 class ReviewQueueItem(BaseModel):
@@ -143,6 +187,7 @@ class ReviewResult(BaseModel):
     ease_factor: float
     interval_days: int
     next_review_date: date
+    new_achievements: List[AchievementRead] = []
 
 
 class VocabularySuggestionRead(BaseModel):
@@ -151,3 +196,7 @@ class VocabularySuggestionRead(BaseModel):
     translation: str
     lesson_id: int
     frequency: int
+
+
+class DailyGoalUpdate(BaseModel):
+    daily_goal: int = Field(ge=1, le=200)

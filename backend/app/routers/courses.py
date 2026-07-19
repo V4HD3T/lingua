@@ -19,6 +19,8 @@ def _build_lesson_read(lesson: Lesson, session: Session) -> LessonRead:
         content=lesson.content,
         order=lesson.order,
         language_code=course.language_code if course else "",
+        grammar_note=lesson.grammar_note,
+        cultural_note=lesson.cultural_note,
     )
 
 

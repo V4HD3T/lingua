@@ -2,9 +2,76 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getQuizByLesson, submitQuiz } from "../api/quizzes";
 import { useAuth } from "../context/AuthContext";
+import { useSpeechSynthesis } from "../hooks/useSpeechSynthesis";
 import { LoadingState, ErrorState } from "../components/StatusMessage";
-import type { Quiz, QuizResult } from "../types";
+import { SpeakerButton } from "../components/SpeakerButton";
+import { SentenceOrderInput } from "../components/SentenceOrderInput";
+import { AchievementToast } from "../components/AchievementToast";
+import type { Achievement, Quiz, QuizQuestion, QuizResult } from "../types";
 import styles from "./QuizPage.module.css";
+
+function QuestionInput({
+  question,
+  value,
+  onChange,
+  languageCode,
+}: {
+  question: QuizQuestion;
+  value: string | undefined;
+  onChange: (value: string) => void;
+  languageCode: string;
+}) {
+  const voice = useSpeechSynthesis();
+
+  if (question.question_type === "fill_blank") {
+    return (
+      <input
+        type="text"
+        className={styles.textInput}
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Type your answer..."
+        required
+      />
+    );
+  }
+
+  if (question.question_type === "sentence_order") {
+    return <SentenceOrderInput words={question.options} onChange={onChange} />;
+  }
+
+  // "listening" and "multiple_choice" both render as a set of options;
+  // listening questions additionally get a speaker button up top.
+  return (
+    <>
+      {question.question_type === "listening" && voice.isSupported && question.audio_text && (
+        <div className={styles.listenRow}>
+          <SpeakerButton
+            isSpeaking={voice.isSpeaking}
+            onClick={() => voice.speak(question.audio_text!, languageCode)}
+            title="Play audio"
+          />
+          <span className={styles.listenHint}>Tap to listen</span>
+        </div>
+      )}
+      <div className={styles.options}>
+        {question.options.map((option) => (
+          <label key={option} className={styles.option}>
+            <input
+              type="radio"
+              name={`question-${question.id}`}
+              value={option}
+              checked={value === option}
+              onChange={() => onChange(option)}
+              required
+            />
+            {option}
+          </label>
+        ))}
+      </div>
+    </>
+  );
+}
 
 export function QuizPage() {
   const { lessonId } = useParams<{ lessonId: string }>();
@@ -12,6 +79,7 @@ export function QuizPage() {
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [result, setResult] = useState<QuizResult | null>(null);
+  const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -22,18 +90,26 @@ export function QuizPage() {
       .catch(() => setError("No quiz was found for this lesson."));
   }, [lessonId]);
 
-  function selectAnswer(questionId: number, option: string) {
-    setAnswers((prev) => ({ ...prev, [String(questionId)]: option }));
+  function setAnswer(questionId: number, value: string) {
+    setAnswers((prev) => ({ ...prev, [String(questionId)]: value }));
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!quiz) return;
+
+    const unanswered = quiz.questions.some((q) => !answers[String(q.id)]?.trim());
+    if (unanswered) {
+      setError("Please answer every question before submitting.");
+      return;
+    }
+
     setError(null);
     setIsSubmitting(true);
     try {
       const res = await submitQuiz(quiz.id, answers);
       setResult(res);
+      setNewAchievements(res.new_achievements);
     } catch {
       setError("Something went wrong submitting your answers.");
     } finally {
@@ -75,21 +151,12 @@ export function QuizPage() {
                 <legend className={styles.questionText}>
                   {index + 1}. {question.question_text}
                 </legend>
-                <div className={styles.options}>
-                  {question.options.map((option) => (
-                    <label key={option} className={styles.option}>
-                      <input
-                        type="radio"
-                        name={`question-${question.id}`}
-                        value={option}
-                        checked={answers[String(question.id)] === option}
-                        onChange={() => selectAnswer(question.id, option)}
-                        required
-                      />
-                      {option}
-                    </label>
-                  ))}
-                </div>
+                <QuestionInput
+                  question={question}
+                  value={answers[String(question.id)]}
+                  onChange={(value) => setAnswer(question.id, value)}
+                  languageCode={quiz.language_code}
+                />
               </fieldset>
             ))}
 
@@ -101,21 +168,24 @@ export function QuizPage() {
       )}
 
       {result && (
-        <div className={styles.result}>
-          <span className={styles.resultScore}>{result.score}%</span>
-          <p className={styles.resultDetail}>
-            You got {result.correct_count} out of {result.total_questions} questions
-            right.
-          </p>
-          <div className={styles.resultActions}>
-            <button type="button" className={styles.retryButton} onClick={handleRetry}>
-              Try again
-            </button>
-            <Link to={`/lessons/${lessonId}`} className={styles.backToLesson}>
-              Back to lesson
-            </Link>
+        <>
+          <div className={styles.result}>
+            <span className={styles.resultScore}>{result.score}%</span>
+            <p className={styles.resultDetail}>
+              You got {result.correct_count} out of {result.total_questions} questions
+              right.
+            </p>
+            <div className={styles.resultActions}>
+              <button type="button" className={styles.retryButton} onClick={handleRetry}>
+                Try again
+              </button>
+              <Link to={`/lessons/${lessonId}`} className={styles.backToLesson}>
+                Back to lesson
+              </Link>
+            </div>
           </div>
-        </div>
+          <AchievementToast achievements={newAchievements} />
+        </>
       )}
     </div>
   );

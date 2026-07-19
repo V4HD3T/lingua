@@ -77,6 +77,24 @@ export function LessonDetailPage() {
       {!error && !lesson && <LoadingState label="Loading lesson" />}
 
       {lesson && <h1>{lesson.title}</h1>}
+
+      {lesson && (lesson.grammar_note || lesson.cultural_note) && (
+        <div className={styles.notesGrid}>
+          {lesson.grammar_note && (
+            <div className={styles.noteCard}>
+              <span className={styles.noteLabel}>Grammar note</span>
+              <p>{lesson.grammar_note}</p>
+            </div>
+          )}
+          {lesson.cultural_note && (
+            <div className={styles.noteCard}>
+              <span className={styles.noteLabel}>Cultural note</span>
+              <p>{lesson.cultural_note}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       <p className={styles.sectionLabel}>Vocabulary</p>
 
       {speech.error && <p className={styles.speechError}>{speech.error}</p>}

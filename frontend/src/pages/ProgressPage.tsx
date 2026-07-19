@@ -2,14 +2,19 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchMyStats } from "../api/stats";
 import { getVocabularySuggestions } from "../api/suggestions";
+import { getMyAchievements } from "../api/achievements";
+import { updateDailyGoal } from "../api/auth";
 import { LoadingState, ErrorState } from "../components/StatusMessage";
-import type { UserStats, VocabularySuggestion } from "../types";
+import type { Achievement, UserStats, VocabularySuggestion } from "../types";
 import styles from "./ProgressPage.module.css";
 
 export function ProgressPage() {
   const [stats, setStats] = useState<UserStats | null>(null);
   const [suggestions, setSuggestions] = useState<VocabularySuggestion[] | null>(null);
+  const [achievements, setAchievements] = useState<Achievement[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isEditingGoal, setIsEditingGoal] = useState(false);
+  const [goalInput, setGoalInput] = useState("");
 
   useEffect(() => {
     fetchMyStats()
@@ -18,7 +23,22 @@ export function ProgressPage() {
     getVocabularySuggestions()
       .then(setSuggestions)
       .catch(() => setSuggestions([])); // non-critical widget, fail quietly
+    getMyAchievements()
+      .then(setAchievements)
+      .catch(() => setAchievements([]));
   }, []);
+
+  async function handleSaveGoal() {
+    const parsed = Number(goalInput);
+    if (!Number.isInteger(parsed) || parsed < 1) return;
+    try {
+      await updateDailyGoal(parsed);
+      setStats((prev) => (prev ? { ...prev, daily_goal: parsed } : prev));
+      setIsEditingGoal(false);
+    } catch {
+      // leave the form open so the person can retry
+    }
+  }
 
   return (
     <div className={styles.page}>
@@ -54,6 +74,54 @@ export function ProgressPage() {
             )}
           </div>
 
+          <div className={styles.goalCard}>
+            <div className={styles.goalHead}>
+              <span className={styles.goalTitle}>Today's goal</span>
+              {!isEditingGoal && (
+                <button
+                  type="button"
+                  className={styles.goalEditButton}
+                  onClick={() => {
+                    setGoalInput(String(stats.daily_goal));
+                    setIsEditingGoal(true);
+                  }}
+                >
+                  Edit
+                </button>
+              )}
+            </div>
+            {isEditingGoal ? (
+              <div className={styles.goalEditRow}>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  className={styles.goalInput}
+                  value={goalInput}
+                  onChange={(e) => setGoalInput(e.target.value)}
+                  autoFocus
+                />
+                <button type="button" className={styles.goalSaveButton} onClick={handleSaveGoal}>
+                  Save
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className={styles.goalDetail}>
+                  {stats.reviews_today} / {stats.daily_goal} words reviewed today
+                </p>
+                <div className={styles.progressTrack}>
+                  <div
+                    className={styles.progressFill}
+                    style={{
+                      width: `${Math.min(100, (stats.reviews_today / stats.daily_goal) * 100)}%`,
+                    }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+
           <div className={styles.statGrid}>
             <div className={styles.statCard}>
               <span className={styles.statNumber}>{stats.total_translations}</span>
@@ -68,6 +136,22 @@ export function ProgressPage() {
               <span className={styles.statLabel}>average score</span>
             </div>
           </div>
+
+          {achievements && achievements.length > 0 && (
+            <>
+              <h2 className={styles.sectionTitle}>Badges earned</h2>
+              <div className={styles.badgeGrid}>
+                {achievements.map((a) => (
+                  <div key={a.code} className={styles.badgeCard} title={a.description}>
+                    <span className={styles.badgeIcon} aria-hidden="true">
+                      🏅
+                    </span>
+                    <span className={styles.badgeName}>{a.name}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
           {suggestions && suggestions.length > 0 && (
             <>

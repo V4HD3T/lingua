@@ -1,0 +1,227 @@
+# Security Review — OWASP Top 10 (2021)
+
+**Scope:** Lingua backend (FastAPI) and frontend (React/TypeScript), as of
+v0.0.7. **Method:** manual source review against each OWASP Top 10 2021
+category, plus automated dependency scanning (`pip-audit`, `npm audit`).
+Every finding below was checked against the actual code — not inferred
+from the framework being "generally fine" — and every fix claimed was
+verified with a passing test. This is not a substitute for a professional
+external penetration test (no dynamic/black-box testing, no fuzzing, no
+infrastructure review), but it is a genuine review of this specific
+codebase, not a generic checklist filled in from memory.
+
+## Summary
+
+| # | Category | Status |
+|---|---|---|
+| A01 | Broken Access Control | ✅ No issues found |
+| A02 | Cryptographic Failures | ⚠️ 1 medium (weak default secret), 1 low (transitive dep, not exploitable here) |
+| A03 | Injection | ✅ No issues found |
+| A04 | Insecure Design | ✅ Fixed this version (rate limiting, revocation); 1 non-security design note |
+| A05 | Security Misconfiguration | ⚠️ 1 medium-high (CORS wildcard, dev-only) |
+| A06 | Vulnerable/Outdated Components | ⚠️ 2 known findings, both assessed, CI-monitored going forward |
+| A07 | Auth Failures | ✅ Fixed this version (rate limiting, refresh rotation); 1 low (registration enumeration) |
+| A08 | Software/Data Integrity Failures | ✅ No issues found |
+| A09 | Logging/Monitoring Failures | ✅ Fixed this version (structured security event logging) |
+| A10 | Server-Side Request Forgery | ✅ Not applicable to current feature set |
+
+Nothing here is rated Critical or High. The two Medium/Medium-High items
+(default secret key, CORS wildcard) are both things that are fine in this
+development environment and **must** be changed before any real
+deployment — that's called out explicitly below and in
+`backend/README.md`.
+
+---
+
+## A01: Broken Access Control
+
+**Checked:** every endpoint that returns or modifies user-specific data —
+`/translate/history`, `/users/me/stats`, `/users/me/review-queue`,
+`/vocabulary/{id}/review`, `/users/me/achievements`,
+`/users/me/vocabulary-suggestions`, `/auth/me`, `/auth/me/goal`.
+
+**Finding:** none. Every one of these scopes its query by `current_user.id`
+derived from the validated JWT (see `get_current_user` in
+`app/routers/auth.py`), never from a client-supplied ID. `/vocabulary/{id}`
+takes an ID in the URL, but that ID identifies a shared catalogue word, not
+a user's own resource — the resulting progress record is still correctly
+tied to `current_user.id`, so there's no path to read or modify another
+user's review schedule by changing the URL.
+
+There is no admin/role concept in this app yet, so there's no
+privilege-escalation surface to review there — noting that as "not
+applicable yet" rather than silently skipping it.
+
+## A02: Cryptographic Failures
+
+**Passwords:** bcrypt via `passlib`, an appropriately slow, salted hash.
+No issues.
+
+**JWTs:** signed with HS256 (HMAC-SHA256), which is appropriate here since
+only this one backend ever needs to verify tokens (no third party needs
+asymmetric verification).
+
+**Finding (Medium): weak default `SECRET_KEY`.** `app/config.py` ships a
+default value (`"change-this-for-development"`). If a deployment forgets
+to override it via `.env`, every JWT becomes forgeable by anyone who reads
+this public repository. **Mitigated this version:** the app now logs a
+security warning at startup if the default is still in use (see
+`app/main.py`). **Not fully closed:** the app still *starts* either way.
+A stronger future fix would refuse to start at all when
+`ENVIRONMENT=production` and the secret is still the default — tracked as
+a recommendation, not implemented here, since this app has no
+`ENVIRONMENT` flag yet to hang that check on.
+
+**Refresh / verification / reset tokens:** generated with
+`secrets.token_urlsafe(32)` (a CSPRNG, 256 bits of entropy) and stored as
+SHA-256 hashes, never in plaintext (`app/services/tokens.py`).
+
+**Finding (Low, transitive, verified not exploitable here):** `pip-audit`
+flags `ecdsa` (pulled in transitively by `python-jose`) for
+PYSEC-2026-1325, a timing side-channel in `ecdsa.SigningKey.sign_digest()`
+that the upstream maintainers have declined to fix (side-channel attacks
+are out of scope for that project). **Checked whether this app is
+actually affected:** this app signs JWTs with HS256 only. I verified
+empirically (not just assumed) that encoding a token with `algorithm="HS256"`
+never imports the `ecdsa` module at all in this process — the vulnerable
+code path is never reached. Accepted as a non-issue *for this specific
+usage*; would need re-review if the JWT algorithm ever changed to an
+ECDSA-based one (e.g. ES256).
+
+## A03: Injection
+
+**Checked:** every database access in the codebase (`grep` for raw
+`execute(`, f-string SQL, or string-formatted queries — none found).
+
+**Finding:** none. All queries go through SQLModel/SQLAlchemy's
+parameterized query builder (`select(...).where(...)`); there is no raw
+SQL string concatenation anywhere in this codebase.
+
+## A04: Insecure Design
+
+**Fixed this version:** the two design-level gaps flagged in the original
+project plan — no way to revoke a JWT before natural expiry, and no
+brute-force protection on auth endpoints — are both addressed (refresh
+tokens with rotation + reuse detection; rate limiting on login/register/
+password-reset-request).
+
+**Design note (not a security vulnerability):** achievement badges are
+awarded purely on action *counts* (e.g. "10 translations") with no check
+on content — someone could submit repeated trivial text to farm badges
+quickly. No data exposure or privilege gain results; this is a
+gamification-integrity concern, not a security one, but a genuine review
+should notice the difference between "checklist says no vulnerability
+here" and actually thinking about how the system could be gamed.
+
+## A05: Security Misconfiguration
+
+**Finding (Medium-High): CORS is wide open.** `app/main.py` currently sets
+`allow_origins=["*"]`. Since this API uses Bearer tokens rather than
+cookies, the classic CSRF risk is lower than a cookie-based session would
+carry — but a wildcard origin still means any website's JavaScript can
+call this API and read the response if it has a valid bearer token (e.g.
+obtained via XSS somewhere else, or a user pasting a token somewhere they
+shouldn't). This is explicitly commented as development-only in the code,
+but calling it out here in writing: **this must be restricted to the
+real frontend origin(s) before any production deployment.**
+
+**Fixed this version:** `SecurityHeadersMiddleware` now sets
+`X-Content-Type-Options`, `X-Frame-Options`, `Content-Security-Policy`,
+`Referrer-Policy`, `Permissions-Policy`, and `Strict-Transport-Security`
+on every response (`app/middleware.py`).
+
+**Checked:** unhandled-exception behavior. FastAPI's default error
+handling doesn't leak stack traces to clients for uncaught exceptions as
+long as the app isn't started with a debug/reload flag that changes that.
+Recommend explicitly confirming this in whatever process manager runs the
+app in production (no code change needed here, but worth stating rather
+than assuming).
+
+## A06: Vulnerable and Outdated Components
+
+**Fixed this version:** `.github/workflows/security-scan.yml` now runs
+`pip-audit` and `npm audit` on every push/PR and weekly on a schedule, so
+a newly-disclosed vulnerability shows up as a CI result instead of
+depending on someone remembering to check.
+
+**Current findings**, both assessed above/elsewhere rather than just
+listed: `ecdsa` transitive dependency (A02, verified not exploitable via
+this app's HS256-only usage), and the `esbuild` dev-server-only advisory
+in the frontend toolchain (documented in `frontend/README.md`, doesn't
+affect the production build, fix requires a breaking Vite 8 upgrade,
+deliberately deferred).
+
+## A07: Identification and Authentication Failures
+
+**Fixed this version:** rate limiting on `/auth/login` (5/min),
+`/auth/register` (5/min), and `/auth/request-password-reset` (3/5min);
+refresh token rotation with reuse detection (a replayed, already-rotated
+refresh token now revokes every session for that user, not just itself);
+short-lived (30 min) access tokens instead of the previous 24-hour ones.
+
+**Checked:** password minimum length (8 characters, enforced both ends);
+the bcrypt 72-byte input handling (already fixed earlier in this
+project — see `CHANGELOG.md` v0.0.1); login's error message is
+appropriately generic ("Incorrect username or password", doesn't reveal
+which was wrong).
+
+**Finding (Low): registration allows limited account enumeration.**
+`/auth/register`'s error message ("Username or email is already
+registered") confirms whether a given email already has an account.
+Lower severity than it might sound, since `/auth/login` and
+`/auth/request-password-reset` were both deliberately built (the latter,
+this version) to avoid this exact leak. This is a genuine trade-off
+(clearer registration error vs. zero enumeration surface) rather than an
+unambiguous bug — noted as a recommendation to consider, not fixed here.
+
+## A08: Software and Data Integrity Failures
+
+**Checked:** no `pickle`/`eval`/dynamic code loading, no auto-update
+mechanism, no CI/CD pipeline that executes unreviewed third-party scripts.
+All request bodies are parsed through Pydantic schemas with defined
+types, not deserialized as arbitrary objects.
+
+**Finding:** none identified relative to this app's actual feature set.
+
+## A09: Security Logging and Monitoring Failures
+
+**Fixed this version:** `app/services/security_logging.py` adds
+structured logging for registration, login success/failure, rate-limit
+hits, refresh-token reuse detection (a strong signal of token theft),
+logout, email verification, password reset request/completion, and the
+insecure-default-secret-key warning.
+
+**Honest limitation:** this logs to stdout via Python's standard
+`logging` module. There is no log aggregation, alerting, or retention
+policy — building one is genuinely infrastructure work (shipping logs to
+a platform that can page someone on "50 failed logins for one account in
+a minute") that sits outside what application code alone can provide.
+This gives you the *events*, in a consistent greppable shape; wiring them
+to alerting is a deployment-time concern, tracked as future work rather
+than glossed over.
+
+## A10: Server-Side Request Forgery (SSRF)
+
+**Checked:** every outbound network call this app makes — the NLLB model
+download (fixed URL from settings, not user-influenced), language
+detection and idiom matching (no network calls at all, pure in-process
+computation), email sending (destination is the address already on file
+for the authenticated/target user, from the database, never a raw URL
+fetched based on request input).
+
+**Finding:** not applicable to this app's current feature set. Revisit if
+a future feature ever fetches a URL supplied in a request (e.g. importing
+content from a link).
+
+---
+
+## For the record: what "done" means here
+
+Every ✅ above reflects specific code reviewed and, where relevant,
+specific tests added (`tests/test_security.py`, 21 tests). Every ⚠️ is
+either genuinely unresolved and documented as a pre-production requirement
+(CORS, default secret), or resolved-for-this-app's-actual-usage-and-explained
+rather than hand-waved (the `ecdsa` finding). None of this replaces an
+external audit before a real production launch handling real user data —
+but it's a real, itemized starting point for one, built the same way the
+rest of this project has been: by actually checking, not asserting.

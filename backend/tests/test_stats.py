@@ -1,20 +1,20 @@
 from datetime import date, timedelta
 
-from app.routers.stats import _compute_streaks
+from app.services.streaks import compute_streaks
 
 
 # --- Pure unit tests for the streak calculation logic (no DB, fast) ---
 
 
 def test_streak_empty():
-    current, longest = _compute_streaks(set())
+    current, longest = compute_streaks(set())
     assert current == 0
     assert longest == 0
 
 
 def test_streak_single_day_today():
     today = date.today()
-    current, longest = _compute_streaks({today})
+    current, longest = compute_streaks({today})
     assert current == 1
     assert longest == 1
 
@@ -22,7 +22,7 @@ def test_streak_single_day_today():
 def test_streak_broken_by_gap():
     today = date.today()
     dates = {today, today - timedelta(days=1), today - timedelta(days=5)}
-    current, longest = _compute_streaks(dates)
+    current, longest = compute_streaks(dates)
     assert current == 2  # today + yesterday
     assert longest == 2  # the longest consecutive block is also 2
 
@@ -30,7 +30,7 @@ def test_streak_broken_by_gap():
 def test_streak_yesterday_still_counts_as_current():
     today = date.today()
     dates = {today - timedelta(days=1), today - timedelta(days=2)}
-    current, longest = _compute_streaks(dates)
+    current, longest = compute_streaks(dates)
     assert current == 2  # active yesterday, streak isn't broken yet today
     assert longest == 2
 
@@ -38,7 +38,7 @@ def test_streak_yesterday_still_counts_as_current():
 def test_streak_two_days_ago_breaks_current():
     today = date.today()
     dates = {today - timedelta(days=2), today - timedelta(days=3)}
-    current, longest = _compute_streaks(dates)
+    current, longest = compute_streaks(dates)
     assert current == 0  # last activity is older than yesterday, streak is broken
     assert longest == 2  # but the longest past block is still 2
 
@@ -52,7 +52,7 @@ def test_streak_longest_can_exceed_current():
         today - timedelta(days=12),
         today - timedelta(days=13),
     }
-    current, longest = _compute_streaks(dates)
+    current, longest = compute_streaks(dates)
     assert current == 1  # only active today
     assert longest == 4  # but there's a 4-day block in the past
 
@@ -80,6 +80,17 @@ def test_stats_with_no_activity(client):
     assert data["total_translations"] == 0
     assert data["total_quiz_attempts"] == 0
     assert data["courses"][0]["completed_lessons"] == 0
+    assert data["daily_goal"] == 10
+    assert data["reviews_today"] == 0
+
+
+def test_stats_reviews_today_counts_todays_reviews(client):
+    headers = _auth_headers(client)
+    client.post("/vocabulary/1/review", json={"quality": 5}, headers=headers)
+    client.post("/vocabulary/2/review", json={"quality": 3}, headers=headers)
+
+    response = client.get("/users/me/stats", headers=headers)
+    assert response.json()["reviews_today"] == 2
 
 
 def test_stats_after_translation_and_quiz(client):

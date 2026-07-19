@@ -7,8 +7,10 @@ from sqlmodel import Session, select
 
 from app.config import settings
 from app.database import engine, init_db
+from app.middleware import SecurityHeadersMiddleware
 from app.models import Course, Language, Lesson, Quiz, QuizQuestion, VocabularyItem
-from app.routers import auth, courses, quizzes, review, stats, suggestions, translate
+from app.routers import achievements, auth, courses, quizzes, review, stats, suggestions, translate
+from app.services.security_logging import log_event
 
 
 def seed_data(session: Session) -> None:
@@ -42,7 +44,22 @@ def seed_data(session: Session) -> None:
     session.commit()
     session.refresh(course)
 
-    lesson = Lesson(course_id=course.id, title="Greetings", order=1)
+    lesson = Lesson(
+        course_id=course.id,
+        title="Greetings",
+        order=1,
+        grammar_note=(
+            "Spanish greetings don't conjugate by formality the way some other "
+            "phrases do, but 'tú' (informal you) vs 'usted' (formal you) will "
+            "matter a lot once you get past hello/goodbye — 'hola' and 'adiós' "
+            "are safe in both registers."
+        ),
+        cultural_note=(
+            "In much of the Spanish-speaking world, greetings between friends "
+            "often come with a single cheek kiss (two in Spain) rather than a "
+            "handshake — context and region vary, but don't be surprised by it."
+        ),
+    )
     session.add(lesson)
     session.commit()
     session.refresh(lesson)
@@ -69,19 +86,61 @@ def seed_data(session: Session) -> None:
     session.commit()
     session.refresh(quiz)
 
-    session.add(
-        QuizQuestion(
-            quiz_id=quiz.id,
-            question_text="What is the English translation of 'hola'?",
-            correct_answer="hello",
-            options_json=json.dumps(["hello", "goodbye", "thank you", "please"]),
-        )
+    session.add_all(
+        [
+            QuizQuestion(
+                quiz_id=quiz.id,
+                question_type="multiple_choice",
+                question_text="What is the English translation of 'hola'?",
+                correct_answer="hello",
+                options_json=json.dumps(["hello", "goodbye", "thank you", "please"]),
+                difficulty=1,
+            ),
+            QuizQuestion(
+                quiz_id=quiz.id,
+                question_type="multiple_choice",
+                question_text="What is the English translation of 'adiós'?",
+                correct_answer="goodbye",
+                options_json=json.dumps(["hello", "goodbye", "please", "sorry"]),
+                difficulty=1,
+            ),
+            QuizQuestion(
+                quiz_id=quiz.id,
+                question_type="fill_blank",
+                question_text="Complete the greeting: \"___, ¿Cómo estás?\"",
+                correct_answer="hola",
+                options_json=json.dumps([]),
+                difficulty=2,
+            ),
+            QuizQuestion(
+                quiz_id=quiz.id,
+                question_type="listening",
+                question_text="What word did you hear?",
+                correct_answer="hola",
+                options_json=json.dumps(["hola", "adiós", "gracias", "por favor"]),
+                audio_text="hola",
+                difficulty=2,
+            ),
+            QuizQuestion(
+                quiz_id=quiz.id,
+                question_type="sentence_order",
+                question_text="Put the words in order to form a greeting.",
+                correct_answer="hola como estas",
+                options_json=json.dumps(["como", "estas", "hola"]),
+                difficulty=3,
+            ),
+        ]
     )
     session.commit()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.secret_key == "change-this-for-development":
+        log_event(
+            "insecure_default_secret_key",
+            message="SECRET_KEY is still the development default -- set a real secret before deploying.",
+        )
     init_db()
     with Session(engine) as session:
         seed_data(session)
@@ -90,6 +149,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
 
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # for development; restrict to specific origins in production
@@ -104,6 +164,7 @@ app.include_router(quizzes.router)
 app.include_router(stats.router)
 app.include_router(review.router)
 app.include_router(suggestions.router)
+app.include_router(achievements.router)
 
 
 @app.get("/health", tags=["system"])

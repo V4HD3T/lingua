@@ -6,9 +6,8 @@ import {
   type ReactNode,
 } from "react";
 import * as authApi from "../api/auth";
+import { clearTokens, getAccessToken, getRefreshToken, setTokens } from "../api/client";
 import type { User } from "../types";
-
-const TOKEN_KEY = "lingua_token";
 
 interface AuthContextValue {
   user: User | null;
@@ -20,7 +19,7 @@ interface AuthContextValue {
     password: string,
     nativeLanguage: string
   ) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -30,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
+    const token = getAccessToken();
     if (!token) {
       setIsLoading(false);
       return;
@@ -38,13 +37,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authApi
       .fetchCurrentUser()
       .then(setUser)
-      .catch(() => localStorage.removeItem(TOKEN_KEY))
+      .catch(() => clearTokens())
       .finally(() => setIsLoading(false));
   }, []);
 
   async function login(username: string, password: string) {
-    const { access_token } = await authApi.login(username, password);
-    localStorage.setItem(TOKEN_KEY, access_token);
+    const { access_token, refresh_token } = await authApi.login(username, password);
+    setTokens(access_token, refresh_token);
     const me = await authApi.fetchCurrentUser();
     setUser(me);
   }
@@ -64,8 +63,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await login(username, password);
   }
 
-  function logout() {
-    localStorage.removeItem(TOKEN_KEY);
+  async function logout() {
+    const refreshToken = getRefreshToken();
+    if (refreshToken) {
+      // Best-effort: revoke server-side so the refresh token can't be used
+      // again even if someone got hold of it. Still clear local state even
+      // if this call fails (e.g. offline) -- the person clicked "log out"
+      // and expects to be logged out locally regardless.
+      try {
+        await authApi.logout(refreshToken);
+      } catch {
+        // ignore -- local logout proceeds either way
+      }
+    }
+    clearTokens();
     setUser(null);
   }
 

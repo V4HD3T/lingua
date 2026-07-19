@@ -7,6 +7,7 @@ from app.database import get_session
 from app.models import Language, TranslationHistory, User
 from app.routers.auth import get_current_user, get_current_user_optional
 from app.schemas import (
+    AchievementRead,
     DetectLanguageRequest,
     DetectLanguageResponse,
     IdiomWarning,
@@ -16,6 +17,7 @@ from app.schemas import (
 )
 from app.services.idiom_detection import find_idioms
 from app.services.language_detection import detect_language
+from app.services.achievements import check_and_award
 from app.services.translation_service import TranslationService, get_translation_service
 
 router = APIRouter(tags=["translate"])
@@ -57,6 +59,7 @@ def translate_text(
     detail = service.translate_detailed(payload.text, payload.source_lang, payload.target_lang)
     idioms = find_idioms(payload.text, payload.source_lang)
 
+    new_achievements = []
     if current_user is not None:
         record = TranslationHistory(
             user_id=current_user.id,
@@ -67,6 +70,7 @@ def translate_text(
         )
         session.add(record)
         session.commit()
+        new_achievements = check_and_award(current_user.id, session)
 
     return TranslateResponse(
         source_text=payload.text,
@@ -76,6 +80,12 @@ def translate_text(
         confidence=detail.confidence,
         alternatives=detail.alternatives,
         idiom_warnings=[IdiomWarning(phrase=i.phrase, note=i.note) for i in idioms],
+        new_achievements=[
+            AchievementRead(
+                code=a.code, name=d.name, description=d.description, earned_at=a.earned_at
+            )
+            for a, d in new_achievements
+        ],
     )
 
 

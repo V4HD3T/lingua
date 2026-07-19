@@ -5,7 +5,8 @@ import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "../hooks/useSpeechSynthesis";
 import { MicButton } from "../components/MicButton";
 import { SpeakerButton } from "../components/SpeakerButton";
-import type { IdiomWarning, Language } from "../types";
+import { AchievementToast } from "../components/AchievementToast";
+import type { Achievement, IdiomWarning, Language } from "../types";
 import styles from "./TranslatePage.module.css";
 
 const DEBOUNCE_MS = 400;
@@ -26,6 +27,7 @@ export function TranslatePage() {
   const [confidence, setConfidence] = useState<number | null>(null);
   const [alternatives, setAlternatives] = useState<string[]>([]);
   const [idiomWarnings, setIdiomWarnings] = useState<IdiomWarning[]>([]);
+  const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
   const [isTranslating, setIsTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedNotice, setSavedNotice] = useState(false);
@@ -77,6 +79,7 @@ export function TranslatePage() {
         setConfidence(result.confidence);
         setAlternatives(result.alternatives.filter((a) => a !== result.translated_text));
         setIdiomWarnings(result.idiom_warnings);
+        setNewAchievements(result.new_achievements);
         setSavedNotice(Boolean(user));
       } catch {
         if (currentRequestId !== requestIdRef.current) return;
@@ -269,6 +272,8 @@ export function TranslatePage() {
           )}
         </div>
       </div>
+
+      <AchievementToast achievements={newAchievements} />
     </div>
   );
 }

@@ -7,7 +7,8 @@ from sqlmodel import Session, select
 from app.database import get_session
 from app.models import Course, Lesson, User, VocabularyItem, VocabularyProgress
 from app.routers.auth import get_current_user
-from app.schemas import ReviewQueueItem, ReviewResult, ReviewSubmission
+from app.schemas import AchievementRead, ReviewQueueItem, ReviewResult, ReviewSubmission
+from app.services.achievements import check_and_award
 from app.services.spaced_repetition import DEFAULT_EASE_FACTOR, compute_next_schedule
 
 router = APIRouter(tags=["review"])
@@ -104,10 +105,16 @@ def submit_review(
     session.commit()
     session.refresh(progress)
 
+    new_achievements = check_and_award(current_user.id, session)
+
     return ReviewResult(
         vocabulary_item_id=vocabulary_item_id,
         repetitions=progress.repetitions,
         ease_factor=progress.ease_factor,
         interval_days=progress.interval_days,
         next_review_date=progress.next_review_date,
+        new_achievements=[
+            AchievementRead(code=a.code, name=d.name, description=d.description, earned_at=a.earned_at)
+            for a, d in new_achievements
+        ],
     )

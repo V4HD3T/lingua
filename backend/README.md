@@ -1,11 +1,53 @@
 # Backend — AI Translation and Language Learning Platform
 
-**Version:** 0.0.5
+**Version:** 0.0.7
 
 A REST API written with FastAPI + SQLModel. Includes authentication,
 real-time translation with automatic language detection, course/lesson/
 vocabulary and quiz modules, spaced-repetition review, and progress/streak
 tracking.
+
+## What's new in 0.0.7
+
+- Access tokens shortened to 30 minutes; sessions now stay alive via
+  server-side-revocable refresh tokens (new `RefreshToken` table,
+  `POST /auth/refresh`, rotated on every use). Reusing an already-rotated
+  refresh token revokes every session for that user. `POST /auth/logout`
+  and `/auth/logout-all` added.
+  Also fixed: a datetime comparison bug where SQLite round-trips columns
+  as naive even though every write path stores UTC-aware datetimes.
+- Rate limiting on `/auth/login`, `/auth/register`, and
+  `/auth/request-password-reset` — `app/services/rate_limiter.py`.
+- Email verification + password reset: `User.is_verified`, `AuthToken`
+  table, `app/services/email_service.py` (mock in this sandbox — no real
+  SMTP here — but the real `SMTPEmailService` path is written and ready
+  for real credentials).
+- `app/middleware.py`: security response headers on every request.
+- `.github/workflows/security-scan.yml`: `pip-audit` + `npm audit` in CI.
+- `SECURITY.md`: a real OWASP Top 10 audit of this codebase.
+- `app/services/security_logging.py`: structured logging for
+  security-relevant events.
+- 21 new tests (106 total).
+
+## What's new in 0.0.6
+
+- `QuizQuestion` gained `question_type` (multiple_choice/fill_blank/
+  listening/sentence_order), `audio_text`, and `difficulty`. Scoring for
+  the new types reuses the existing string-comparison logic unchanged.
+- Quiz scoring now grades only submitted answers, not every question in
+  the quiz — needed so adaptive difficulty (below) can't unfairly tank a
+  score by "failing" questions the learner was never shown.
+- `GET /quizzes/{id}` and `GET /lessons/{id}/quiz` now adapt question
+  selection to the learner's recent average score, when authenticated.
+- `app/services/achievements.py` — 8-badge catalogue, checked after
+  translate/quiz-submit/review-submit. New `Achievement` table,
+  `GET /users/me/achievements`.
+- `daily_review_goal` on `User` (default 10), `PATCH /auth/me/goal`,
+  `reviews_today` added to `/users/me/stats`.
+- `grammar_note` / `cultural_note` added to `Lesson`.
+- Moved streak computation to `app/services/streaks.py` (was living
+  directly in the stats router; now used from two places).
+- 18 new tests (85 total).
 
 ## What's new in 0.0.5
 
@@ -61,7 +103,8 @@ data is added (5 languages, 1 course, 1 lesson, 2 vocabulary items, 1 quiz).
 pytest -v
 ```
 
-67 tests; covers authentication, translation (anonymous + registered
+106 tests; covers authentication (incl. refresh tokens, rate limiting,
+verification, password reset), daily goals, translation (anonymous + registered
 user, confidence/alternatives, idiom warnings), language detection,
 lesson/course flows, quizzes, spaced repetition, personalized vocabulary
 suggestions, and progress/streak calculation. The tests use an isolated
@@ -127,10 +170,11 @@ that actually connects the translate and learn modules to each other.
 
 ```
 app/
-  main.py            FastAPI entry point, router registration, sample data
+  main.py            FastAPI entry point, middleware, router registration, sample data
   config.py          Settings read from environment variables
   database.py        SQLModel engine/session
-  models.py          Database tables (User, Course, Quiz, VocabularyProgress, ...)
+  middleware.py      Security response headers
+  models.py          Database tables (User, Course, Quiz, RefreshToken, AuthToken, ...)
   schemas.py         API request/response schemas
   security.py        Password hashing + JWT
   services/
@@ -139,24 +183,66 @@ app/
     idiom_detection.py       Small curated idiom dictionary + matching
     personalized_suggestions.py  Vocabulary suggestions from translation history
     spaced_repetition.py     Pure SM-2 scheduling function
+    streaks.py           Daily streak computation (shared by stats + achievements)
+    achievements.py      Badge catalogue + award-checking logic
+    tokens.py            Generate/hash opaque tokens (refresh, verification, reset)
+    rate_limiter.py      In-memory sliding-window rate limiter
+    email_service.py     Mock + SMTP email abstraction
+    security_logging.py  Structured logging for security-relevant events
   routers/
-    auth.py          /auth/register, /auth/login, /auth/me
+    auth.py          /auth/register, /login, /refresh, /logout, /logout-all,
+                      /verify-email, /request-password-reset, /reset-password,
+                      /me, /me/goal
     translate.py     /translate, /translate/history, /languages, /detect-language
     courses.py       /courses, /courses/{id}/lessons, /lessons/{id}, /lessons/{id}/vocabulary
     quizzes.py       /quizzes/{id}, /quizzes/{id}/submit, /lessons/{id}/quiz
-    stats.py         /users/me/stats (streak, progress, overall statistics)
+    stats.py         /users/me/stats (streak, progress, daily goal, overall statistics)
     review.py        /users/me/review-queue, /vocabulary/{id}/review (spaced repetition)
     suggestions.py   /users/me/vocabulary-suggestions (personalized, from translation history)
-tests/               pytest test suite (67 tests)
+    achievements.py  /users/me/achievements
+tests/               pytest test suite (106 tests)
 ```
 
 ## Authentication flow
 
-1. `POST /auth/register` — register with username, email, password
-2. `POST /auth/login` — log in with form-data (`username`, `password`), returns a JWT
-3. Other protected endpoints are accessed with an `Authorization: Bearer <token>` header
+1. `POST /auth/register` — register with username, email, password. Sends
+   a verification email (mocked in this environment — see "Email" below).
+2. `POST /auth/login` — log in with form-data (`username`, `password`),
+   returns a short-lived `access_token` (30 min) and a longer-lived
+   `refresh_token` (30 days).
+3. Other protected endpoints are accessed with an `Authorization: Bearer
+   <access_token>` header.
+4. When the access token expires, `POST /auth/refresh` with the refresh
+   token returns a new pair (the old refresh token is rotated out —
+   single use). The frontend does this automatically; see
+   `frontend/README.md`.
+5. `POST /auth/logout` (with the refresh token) or `/auth/logout-all`
+   (all sessions, requires being logged in) to revoke.
 
 The `/translate` endpoint deliberately supports both anonymous and
 logged-in use: without a token, translation still works but isn't saved to
 history; with a token, it is saved. This is a typical design for a "try it
 without registering, see your history once you create an account" flow.
+
+## Security
+
+Rate limiting (login/register/password-reset), refresh token rotation
+with reuse detection, security response headers, structured security
+logging, and CI dependency scanning are all covered above and tested in
+`tests/test_security.py`. For a category-by-category review of this
+codebase against the OWASP Top 10 — including the things that are *not*
+fully resolved yet (a wildcard CORS origin that must be restricted before
+any production deployment, and a weak default `SECRET_KEY`) — see
+**[`../SECURITY.md`](../SECURITY.md)**.
+
+## Email
+
+`app/services/email_service.py` uses `MockEmailService` by default (no
+`SMTP_HOST` configured) — verification and password-reset emails are
+recorded in memory instead of sent, which is what makes the flows testable
+without a real mail server. Fill in the `SMTP_*` variables in `.env` to
+send real emails via `SMTPEmailService` (standard library `smtplib`, no
+extra dependency) — this hasn't been exercised against a real SMTP server
+in this environment (no credentials, no network access to one), so treat
+it as a solid starting point rather than something already proven end to
+end.

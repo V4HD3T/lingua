@@ -41,3 +41,39 @@ def test_duplicate_username_rejected(client):
     assert first.status_code == 201
     second = client.post("/auth/register", json=payload)
     assert second.status_code == 400
+
+
+def test_new_user_has_default_daily_goal(client):
+    response = client.post(
+        "/auth/register",
+        json={"username": "goaluser", "email": "goaluser@example.com", "password": "password1234"},
+    )
+    assert response.json()["daily_review_goal"] == 10
+
+
+def test_update_daily_goal(client):
+    client.post(
+        "/auth/register",
+        json={"username": "goalsetter", "email": "goalsetter@example.com", "password": "password1234"},
+    )
+    login = client.post("/auth/login", data={"username": "goalsetter", "password": "password1234"})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    response = client.patch("/auth/me/goal", json={"daily_goal": 25}, headers=headers)
+    assert response.status_code == 200
+    assert response.json()["daily_review_goal"] == 25
+
+    me = client.get("/auth/me", headers=headers)
+    assert me.json()["daily_review_goal"] == 25
+
+
+def test_update_daily_goal_rejects_out_of_range(client):
+    client.post(
+        "/auth/register",
+        json={"username": "badgoal", "email": "badgoal@example.com", "password": "password1234"},
+    )
+    login = client.post("/auth/login", data={"username": "badgoal", "password": "password1234"})
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    response = client.patch("/auth/me/goal", json={"daily_goal": 0}, headers=headers)
+    assert response.status_code == 422

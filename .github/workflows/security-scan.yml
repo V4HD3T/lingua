@@ -1,0 +1,54 @@
+name: Dependency security scan
+
+# Runs on every push/PR so a newly-disclosed vulnerability in a dependency
+# shows up as a CI failure, not as something someone has to remember to
+# check for manually. Each job is allowed to fail without blocking the
+# other -- a frontend advisory shouldn't hide a backend one or vice versa.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Also run weekly on a schedule: a dependency that was clean when last
+    # pushed can still grow a newly-disclosed vulnerability with no code
+    # change on our side at all.
+    - cron: "0 6 * * 1"
+
+jobs:
+  backend-audit:
+    name: Backend (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+      - name: Run pip-audit
+        working-directory: backend
+        run: pipx run pip-audit -r requirements.txt
+
+  frontend-audit:
+    name: Frontend (npm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm install
+      - name: Run npm audit
+        working-directory: frontend
+        # --audit-level=high: the frontend/README.md documents one known
+        # moderate esbuild dev-server advisory that's deliberately
+        # deferred (dev-only, no fix without a breaking Vite 8 upgrade).
+        # Failing CI on that specific known/accepted issue on every run
+        # wouldn't tell anyone anything new; a *new* high/critical finding
+        # should still fail the build.
+        run: npm audit --audit-level=high

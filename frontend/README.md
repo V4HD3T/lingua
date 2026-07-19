@@ -1,10 +1,35 @@
 # Frontend — Lingua
 
-**Version:** 0.0.5
+**Version:** 0.0.7
 
 A single-page app built with Vite + React + TypeScript. Consumes the
 backend's authentication, translation (with language detection), course/
 lesson/vocabulary, quiz, spaced-repetition review, and progress endpoints.
+
+## What's new in 0.0.7
+
+- **Automatic token refresh**: `api/client.ts` now retries once on a 401
+  by silently calling `/auth/refresh`, so the shorter-lived access token
+  (30 min, down from 24h) doesn't mean getting logged out constantly.
+  Concurrent requests share one in-flight refresh instead of racing.
+- **`/forgot-password`, `/reset-password`, `/verify-email`** — new pages
+  for the password reset and email verification flows.
+- `logout()` now actually calls the backend to revoke the refresh token,
+  not just clearing local state.
+
+## What's new in 0.0.6
+
+- Quiz page now renders 4 question types: multiple choice, fill-in-the-
+  blank (text input), listening (speaker button + options), and sentence
+  ordering (new `SentenceOrderInput` component — tap words to build the
+  sentence).
+- New **`AchievementToast`** component: shows a small notification
+  whenever `new_achievements` comes back non-empty from translate, quiz
+  submit, or review submit.
+- `/progress` gained a **daily goal** card (editable target, progress bar
+  against today's review count) and a **badges earned** grid.
+- Lesson page shows **grammar and cultural notes** when the lesson has
+  them.
 
 ## What's new in 0.0.5
 
@@ -59,12 +84,15 @@ npm run preview   # serves the built version locally
 |---|---|
 | `/` | Real-time translation, with optional language detection (no login required) |
 | `/login`, `/register` | Authentication |
+| `/forgot-password` | Request a password reset email |
+| `/reset-password` | Set a new password (from the emailed link) |
+| `/verify-email` | Confirm email ownership (from the emailed link) |
 | `/courses` | Course list |
 | `/courses/:courseId` | Course detail + lesson list |
 | `/lessons/:lessonId` | Vocabulary (listen + pronunciation practice) + entry point to the quiz |
-| `/lessons/:lessonId/quiz` | Taking the quiz (requires login) |
+| `/lessons/:lessonId/quiz` | Taking the quiz — multiple choice, fill-in-the-blank, listening, sentence ordering (requires login) |
 | `/review` | Spaced-repetition flashcard review (requires login) |
-| `/progress` | Streak, course progress, overall stats (requires login) |
+| `/progress` | Streak, daily goal, badges, course progress, overall stats (requires login) |
 | `/history` | Translation history (requires login) |
 
 ## Architecture notes

@@ -3,8 +3,9 @@ import { Link } from "react-router-dom";
 import { getReviewQueue, submitReview } from "../api/review";
 import { useSpeechSynthesis } from "../hooks/useSpeechSynthesis";
 import { SpeakerButton } from "../components/SpeakerButton";
+import { AchievementToast } from "../components/AchievementToast";
 import { LoadingState, ErrorState } from "../components/StatusMessage";
-import type { ReviewQueueItem } from "../types";
+import type { Achievement, ReviewQueueItem } from "../types";
 import styles from "./ReviewPage.module.css";
 
 // Simplified 3-button rating, mapped onto SM-2's 0-5 quality scale.
@@ -20,6 +21,7 @@ export function ReviewPage() {
   const [isRevealed, setIsRevealed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sessionAchievements, setSessionAchievements] = useState<Achievement[]>([]);
 
   const voice = useSpeechSynthesis();
 
@@ -35,7 +37,10 @@ export function ReviewPage() {
     if (!currentItem || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await submitReview(currentItem.vocabulary_item_id, quality);
+      const result = await submitReview(currentItem.vocabulary_item_id, quality);
+      if (result.new_achievements.length > 0) {
+        setSessionAchievements((prev) => [...prev, ...result.new_achievements]);
+      }
       setIndex((prev) => prev + 1);
       setIsRevealed(false);
     } catch {
@@ -72,6 +77,7 @@ export function ReviewPage() {
           <Link to="/progress" className={styles.browseLink}>
             See your progress →
           </Link>
+          <AchievementToast achievements={sessionAchievements} />
         </div>
       )}
 
