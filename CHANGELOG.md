@@ -11,6 +11,61 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.0] — Docker, Redis cache & first deploy
+
+The minor-version bump is earned: this is the release where the system
+becomes a deployable product instead of a two-terminal dev setup, and
+where the last "before production" item from the security audit gets
+closed in the version it was always scheduled for.
+
+### Added
+
+- **Docker + docker-compose, one command** (`docker compose up --build`):
+  backend image (python-slim, non-root user, `HEALTHCHECK` against the
+  rate-limit-exempt `/health`, startup migrations already handled by
+  `init_db`), frontend image (two-stage: Node build → nginx with SPA
+  fallback and immutable-asset caching), Redis, and a named volume so
+  SQLite survives container replacement. Uvicorn runs with
+  `--proxy-headers` so rate limiting and security logs see real client
+  IPs behind platform proxies — the deployment concern promised in the
+  v0.0.8 `client_ip()` comment, now paid off (with the trust tradeoff
+  documented in the Dockerfile).
+- **Redis translation cache** (`app/services/translation_cache.py`):
+  read-through cache keyed on `(source, target, sha256(text))`. Two
+  load-bearing rules: disabled unless `REDIS_URL` is set (dev/tests need
+  no Redis), and a cache failure can only ever mean a cache *miss* —
+  short timeouts, broad catches, translations never break because Redis
+  did. Only the model output is cached; history, achievements, and idiom
+  warnings run on every request, and there's a test proving a cache hit
+  still records history. Ceremonial with the mock service; the whole
+  point once real NLLB inference is on.
+- **CORS locked down**: `allow_origins` is now the configured
+  `FRONTEND_BASE_URL` instead of `"*"` — closing the one
+  must-fix-before-production finding from the v0.0.7 OWASP audit
+  (SECURITY.md A05 updated).
+- **`DEPLOYMENT.md`**: Railway/Render/Fly for the backend (env-var table,
+  SQLite-volume vs Postgres tradeoff, SMTP), Vercel/Netlify for the
+  frontend (`vercel.json` SPA rewrite, build-time `VITE_API_URL`),
+  secrets-management rules, and a post-deploy checklist — which also
+  closes the "prod env/secret management guide" roadmap item.
+- 7 new tests (148 total, 93% coverage): cache unit behaviour (disabled,
+  roundtrip, per-language keys, corrupted entries, outage degradation)
+  and the endpoint contract (hit skips the model, never the history).
+
+### Honest limits
+
+- No Docker daemon in this environment: images and compose were
+  validated by inspection and YAML parsing, not by an actual
+  `docker compose up`. First local run may surface small friction.
+- The Postgres path is documented and dependency-commented
+  (`psycopg2-binary`) but untested — the migration chain is CI-verified
+  on SQLite only.
+
+### Changed
+
+- Version bumped to 0.1.0; README rewritten around a compact
+  version-history table (the per-version detail stays here).
+
 ## [0.0.9] — Alembic migrations, quiz sessions & admin API
 
 The schema-discipline version. create_all served through v0.0.8, but it

@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_name: str = "AI Translation and Language Learning Platform"
-    app_version: str = "0.0.9"
+    app_version: str = "0.1.0"
     database_url: str = "sqlite:///./app.db"
 
     secret_key: str = "change-this-for-development"
@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_from_address: str = "no-reply@lingua.example"
+
+    # Redis translation cache (v0.1.0). Empty = disabled: dev and tests
+    # need no Redis running, and the cache degrades gracefully anyway --
+    # see app/services/translation_cache.py.
+    redis_url: str = ""
+    translation_cache_ttl_seconds: int = 604800  # 7 days
 
     frontend_base_url: str = "http://localhost:5173"
 

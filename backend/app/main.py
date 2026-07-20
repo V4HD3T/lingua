@@ -159,7 +159,11 @@ app.add_middleware(GeneralRateLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # for development; restrict to specific origins in production
+    # v0.1.0: the wildcard flagged in SECURITY.md is gone -- only the
+    # configured frontend origin may make credentialed browser calls.
+    # Local dev works out of the box (the default is the Vite dev URL);
+    # deployments set FRONTEND_BASE_URL to their real frontend origin.
+    allow_origins=[settings.frontend_base_url],
     allow_methods=["*"],
     allow_headers=["*"],
 )

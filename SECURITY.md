@@ -15,11 +15,11 @@ codebase, not a generic checklist filled in from memory.
 | # | Category | Status |
 |---|---|---|
 | A01 | Broken Access Control | ✅ No issues found |
-| A02 | Cryptographic Failures | ⚠️ 1 medium (weak default secret), 1 low (transitive dep, not exploitable here) |
+| A02 | Cryptographic Failures | ⚠️ 1 medium (weak default secret, startup-warned); low transitive-dep finding resolved post-v0.0.9 (PyJWT migration) |
 | A03 | Injection | ✅ No issues found |
 | A04 | Insecure Design | ✅ Fixed this version (rate limiting, revocation); 1 non-security design note |
-| A05 | Security Misconfiguration | ⚠️ 1 medium-high (CORS wildcard, dev-only) |
-| A06 | Vulnerable/Outdated Components | ⚠️ 2 known findings, both assessed, CI-monitored going forward |
+| A05 | Security Misconfiguration | ✅ CORS wildcard finding resolved in v0.1.0 (origin allowlist) |
+| A06 | Vulnerable/Outdated Components | ✅ both findings resolved post-v0.0.9 (PyJWT, Vite 8); CI-monitored going forward |
 | A07 | Auth Failures | ✅ Fixed this version (rate limiting, refresh rotation); 1 low (registration enumeration) |
 | A08 | Software/Data Integrity Failures | ✅ No issues found |
 | A09 | Logging/Monitoring Failures | ✅ Fixed this version (structured security event logging) |
@@ -131,6 +131,11 @@ obtained via XSS somewhere else, or a user pasting a token somewhere they
 shouldn't). This is explicitly commented as development-only in the code,
 but calling it out here in writing: **this must be restricted to the
 real frontend origin(s) before any production deployment.**
+
+**Update (v0.1.0):** done, in the deployment version where it belonged —
+`allow_origins` now reads the single configured `FRONTEND_BASE_URL`
+(default: the local Vite dev origin), and `DEPLOYMENT.md` documents
+setting it per environment. The wildcard is gone.
 
 **Fixed this version:** `SecurityHeadersMiddleware` now sets
 `X-Content-Type-Options`, `X-Frame-Options`, `Content-Security-Policy`,

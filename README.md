@@ -1,6 +1,6 @@
 # Lingua — AI Translation and Language Learning Platform
 
-**Version:** 0.0.7
+**Version:** 0.1.0
 
 A platform offering real-time translation and interactive language
 learning for multilingual users. Built as part of a university graduation
@@ -9,70 +9,39 @@ project.
 For the full architecture, technology rationale, and roadmap, see
 **[ARCHITECTURE.md](./ARCHITECTURE.md)**. For the complete version history,
 see **[CHANGELOG.md](./CHANGELOG.md)**. For the security review, see
-**[SECURITY.md](./SECURITY.md)**.
+**[SECURITY.md](./SECURITY.md)**. For running and deploying it, see
+**[DEPLOYMENT.md](./DEPLOYMENT.md)**.
 
-## What's new in 0.0.7
+## Version history
 
-Completes the "Güvenlik" topic:
+One line per version; the full story (rationale, tradeoffs, bugs caught)
+lives in [CHANGELOG.md](./CHANGELOG.md).
 
-- **Refresh tokens + revocation** — short-lived (30 min) access tokens,
-  server-side-revocable refresh tokens with rotation. A replayed/stolen
-  refresh token now kills every session for that user, not just itself.
-- **Rate limiting** on login, registration, and password-reset requests.
-- **Email verification + password reset** — full flows, with a mock email
-  service (no real SMTP credentials in this sandbox, but the architecture
-  and all logic is real and tested).
-- **Security headers** (CSP, HSTS, X-Frame-Options, and more) on every response.
-- **CI dependency scanning** — `pip-audit` + `npm audit` on every push and weekly.
-- **A real OWASP Top 10 audit** (`SECURITY.md`) — genuine findings, not a
-  checklist: a CORS wildcard that must be fixed before production, a weak
-  default secret key (now warned about at startup), and a transitive
-  dependency CVE that I verified is actually unreachable given how this
-  app uses JWTs.
-- Backend: 106/106 tests passing (21 new this version).
-
-## What's new in 0.0.6
-
-Completes the "Dil öğrenme / pedagoji" topic:
-
-- **New quiz types**: fill-in-the-blank, listening (uses text-to-speech),
-  sentence ordering — on top of the existing multiple choice.
-- **Adaptive difficulty**: quiz questions now skew easier or harder based
-  on your recent average score.
-- **Achievement badges**: 8 badges (first translation, quiz milestones,
-  streak milestones, and more), shown as a toast when earned and listed
-  on `/progress`.
-- **Daily goal**: set a "words to review today" target, tracked with a
-  progress bar on `/progress`.
-- **Lesson content**: grammar and cultural notes on the lesson page.
-- Flashcard mode needed no new work — already covered by the `/review`
-  page from v0.0.4.
-- Backend: 85/85 tests passing (18 new this version).
-
-## What's new in 0.0.5
-
-Completes the "AI / translation engine" topic:
-
-- **Confidence score + alternative translations** on every `/translate`
-  response. Real once NLLB is active; clearly-labeled mock placeholders
-  until then.
-- **Idiom warnings** — flags phrases like "piece of cake" or "en las
-  nubes" as non-literal, from a small curated dictionary (5 languages).
-- **Personalized vocabulary suggestions** — words you keep translating
-  that you haven't formally started learning yet, shown on `/progress`.
-  The one feature that actually connects translation and learning.
-- **Real NLLB integration** — confirmed (empirically, via `curl`) this
-  sandbox still can't reach huggingface.co. Everything buildable without
-  actually running the model is done and documented; running it for real
-  is queued for your own machine.
-- Backend: 67/67 tests passing (16 new this version) — including two real
-  bugs the new tests caught and fixed before shipping.
-
-Full details in `CHANGELOG.md`.
+| Version | Summary |
+| --- | --- |
+| 0.0.1 | Backend skeleton: FastAPI + SQLModel, JWT auth, core translate/course/quiz endpoints (mock translation), seeded content. |
+| 0.0.2 | Frontend: React + TypeScript (Vite) interface for every backend flow. |
+| 0.0.3 | Browser speech recognition (dictation + pronunciation practice), streak & progress stats, lesson→quiz lookups. |
+| 0.0.4 | Automatic language detection (with honest reliability gating), text-to-speech, SM-2 spaced repetition + `/review`. |
+| 0.0.5 | Translation depth: confidence + alternatives, idiom warnings, personalized vocabulary suggestions, real-NLLB groundwork. |
+| 0.0.6 | Pedagogy: four quiz types, adaptive difficulty, achievement badges, daily goals, grammar & cultural notes. |
+| 0.0.7 | Security: refresh-token rotation, auth rate limiting, email verification & password reset, security headers, OWASP Top 10 audit, CI dependency scanning. |
+| 0.0.8 | Test & CI infrastructure: pytest + coverage gate and frontend build on every push, app-wide rate limiting, paginated lists. |
+| 0.0.9 | Alembic migrations (+ drift test), served-set quiz grading (`QuizSession`), admin content API; post-release: python-jose→PyJWT and Vite 8 — both dependency audits clean. |
+| 0.1.0 | Ops: Docker + docker-compose (one command), Redis translation cache, CORS locked to the configured origin, deployment guide + Railway/Vercel configs. |
 
 ## Quick start
 
-You'll need two terminals — one for the backend, one for the frontend.
+### Option A — one command (Docker)
+
+```bash
+docker compose up --build
+```
+
+→ Frontend: http://localhost:8080 · Backend + Swagger: http://localhost:8000/docs
+(Environment variables and cloud deployment: `DEPLOYMENT.md`.)
+
+### Option B — run directly (two terminals)
 
 **Terminal 1 — Backend**
 ```bash
@@ -99,7 +68,7 @@ and architecture notes.
 
 ## Status
 
-- ✅ Backend: auth (+ refresh tokens, email verification, password reset, rate limiting, daily goals), translation (+ confidence/alternatives/idiom warnings/language detection), courses/lessons (+ grammar/cultural notes), quizzes (4 types + adaptive difficulty), progress/streak, spaced repetition, personalized suggestions, achievement badges — 141 tests passing
+- ✅ Backend: auth (+ refresh tokens, email verification, password reset, rate limiting, daily goals), translation (+ confidence/alternatives/idiom warnings/language detection), courses/lessons (+ grammar/cultural notes), quizzes (4 types + adaptive difficulty), progress/streak, spaced repetition, personalized suggestions, achievement badges — 148 tests passing
 - ✅ Frontend: a working interface for every flow (React + TypeScript)
 - ✅ Speech: voice input (translation + pronunciation practice) and voice output (translations + vocabulary + listening quiz questions), both browser-based, no model download
 - ✅ Progress tracking: daily streak, daily review goal, per-course completion percentage, achievement badges (`/progress`)
@@ -107,9 +76,10 @@ and architecture notes.
 - ✅ Security: app-wide + per-endpoint rate limiting, refresh token rotation, security headers, CI dependency scanning, real OWASP Top 10 audit (`SECURITY.md`)
 - ✅ Test & CI infrastructure: pytest + coverage gate and frontend type-check/build on every push (`.github/workflows/ci.yml`), paginated list endpoints
 - ✅ Data layer & content ops: Alembic migrations (with a migration-drift test), served-set quiz grading via QuizSession, admin CRUD API for all course/quiz content (`scripts/make_admin.py` to promote)
+- ✅ Ops & deploy: Docker + docker-compose (one command), Redis translation cache with graceful degradation, CORS locked to the configured frontend origin, deployment guide + Railway/Vercel configs (`DEPLOYMENT.md`)
 - ✅ AI/translation engine topic: complete except running the real NLLB model, which needs to happen on your own machine (this sandbox has no network access to huggingface.co)
 - ✅ Language learning/pedagogy topic: complete
 - ✅ Security topic: complete
-- ⏳ Up next: Docker + docker-compose, Redis translation cache, and first real deploy (v0.1.0)
+- ⏳ Up next: UX round — dark mode, a general toast system, copy-to-clipboard, accessibility audit (v0.1.1)
 
 (Full roadmap: `ARCHITECTURE.md` §6 · Full version history: `CHANGELOG.md` · Security review: `SECURITY.md`)

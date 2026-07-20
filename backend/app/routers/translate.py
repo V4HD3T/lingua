@@ -21,6 +21,7 @@ from app.services.achievements import check_and_award
 from app.services.idiom_detection import find_idioms
 from app.services.language_detection import detect_language
 from app.services.rate_limiter import client_ip, enforce_rate_limit, translate_rate_limiter
+from app.services.translation_cache import TranslationCache, get_translation_cache
 from app.services.translation_service import TranslationService, get_translation_service
 
 router = APIRouter(tags=["translate"])
@@ -51,6 +52,7 @@ def translate_text(
     payload: TranslateRequest,
     session: Session = Depends(get_session),
     service: TranslationService = Depends(get_translation_service),
+    cache: TranslationCache = Depends(get_translation_cache),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """Translates text in real time. If logged in, it's saved to history;
@@ -66,7 +68,13 @@ def translate_text(
     # model inference, which makes it the most attractive target for abuse.
     enforce_rate_limit(translate_rate_limiter, client_ip(request), "translate")
 
-    detail = service.translate_detailed(payload.text, payload.source_lang, payload.target_lang)
+    # Read-through cache (v0.1.0): only the model output is cached.
+    # History, achievements, and idiom warnings run on every request --
+    # a hit must be indistinguishable from a miss to the learner's data.
+    detail = cache.get(payload.source_lang, payload.target_lang, payload.text)
+    if detail is None:
+        detail = service.translate_detailed(payload.text, payload.source_lang, payload.target_lang)
+        cache.set(payload.source_lang, payload.target_lang, payload.text, detail)
     idioms = find_idioms(payload.text, payload.source_lang)
 
     new_achievements = []

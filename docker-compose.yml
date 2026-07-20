@@ -1,0 +1,47 @@
+# One command for the whole system: docker compose up --build
+#   frontend -> http://localhost:8080
+#   backend  -> http://localhost:8000  (Swagger at /docs)
+#
+# The browser talks to the backend directly on the published :8000 port
+# (VITE_API_URL is baked into the frontend build below), so the backend's
+# CORS allowlist must name the frontend's origin -- that's what
+# FRONTEND_BASE_URL here is for.
+services:
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Persistent SQLite on the named volume below; the image-internal
+      # default would be wiped with the container.
+      DATABASE_URL: sqlite:////data/app.db
+      REDIS_URL: redis://redis:6379/0
+      FRONTEND_BASE_URL: http://localhost:8080
+      # Real deployments must set a real value (see DEPLOYMENT.md); the
+      # app logs a loud warning on the default.
+      SECRET_KEY: ${SECRET_KEY:-change-this-for-development}
+    volumes:
+      - lingua-data:/data
+    depends_on:
+      - redis  # startup order only; the cache degrades gracefully if Redis is down
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8000
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  lingua-data:
