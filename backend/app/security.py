@@ -1,7 +1,12 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from jose import JWTError, jwt
+# PyJWT replaced python-jose in the post-v0.0.9 dependency response:
+# python-jose drags in ecdsa, which pip-audit flags (PYSEC-2026-1325)
+# with no fixed version upstream. This app signs HS256 only, so the ECDSA
+# code path was pure, never-exercised attack surface. PyJWT is the
+# actively maintained standard and has no such dependency.
+import jwt
 from passlib.context import CryptContext
 
 from app.config import settings
@@ -29,5 +34,5 @@ def decode_access_token(token: str) -> Optional[str]:
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         return payload.get("sub")
-    except JWTError:
+    except jwt.PyJWTError:
         return None

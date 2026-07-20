@@ -88,6 +88,13 @@ code path is never reached. Accepted as a non-issue *for this specific
 usage*; would need re-review if the JWT algorithm ever changed to an
 ECDSA-based one (e.g. ES256).
 
+**Update (post-v0.0.9):** resolved for good rather than left as an
+accepted risk -- `python-jose` was replaced with `PyJWT`, which removes
+the `ecdsa` package from the dependency tree entirely (and swaps a
+sparsely maintained JWT library for the actively maintained standard).
+The HS256-only analysis above is exactly what made this safe as a
+drop-in change.
+
 ## A03: Injection
 
 **Checked:** every database access in the codebase (`grep` for raw
@@ -144,12 +151,14 @@ than assuming).
 a newly-disclosed vulnerability shows up as a CI result instead of
 depending on someone remembering to check.
 
-**Current findings**, both assessed above/elsewhere rather than just
-listed: `ecdsa` transitive dependency (A02, verified not exploitable via
-this app's HS256-only usage), and the `esbuild` dev-server-only advisory
-in the frontend toolchain (documented in `frontend/README.md`, doesn't
-affect the production build, fix requires a breaking Vite 8 upgrade,
-deliberately deferred).
+**Findings history:** the two findings from the v0.0.7 audit -- the
+`ecdsa` transitive dependency (A02) and the `esbuild` dev-server advisory
+in the frontend toolchain -- were first assessed and documented as
+accepted risks, then eliminated in the post-v0.0.9 dependency response:
+`python-jose` was replaced with `PyJWT` (removing `ecdsa` from the
+tree), and Vite was upgraded 5 -> 8 (pulling a patched `esbuild`). Both
+audits now pass clean; the workflow gate exists to catch the *next*
+disclosure.
 
 ## A07: Identification and Authentication Failures
 

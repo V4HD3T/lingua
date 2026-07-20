@@ -143,10 +143,8 @@ it), reveal the translation, rate yourself Again/Good/Easy. That rating
 drives a real SM-2 scheduling algorithm on the backend — see
 `backend/app/services/spaced_repetition.py`.
 
-## Known warning
+## Toolchain note
 
-`npm audit` reports a moderate-severity advisory about the `esbuild`
-dependency in Vite's dev server (only during `npm run dev`, doesn't affect
-the production build). Fixing it requires a breaking upgrade to Vite 8;
-deliberately deferred for now. Details:
-https://github.com/advisories/GHSA-67mh-4wv8-2f99
+The Vite 8 upgrade (post-v0.0.9) resolved the previously documented
+`esbuild` dev-server advisory (GHSA-67mh-4wv8-2f99); `npm audit` is clean
+as of that change.

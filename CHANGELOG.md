@@ -66,6 +66,29 @@ two features that required schema changes rode in on them.
   creation/authorization/reuse, the closed exploit, admin authz +
   mass-assignment guard, the full content pipeline, and cascades.
 
+### Security — post-release dependency response
+
+The security-scan workflow did its job: it failed on real findings, four
+pushes in a row, until they were dealt with. Both were resolved by
+removing the vulnerable code from the tree rather than allowlisting it:
+
+- `python-jose` -> `PyJWT` (2.13.0): pip-audit flagged the transitive
+  `ecdsa` package (PYSEC-2026-1325) with *no fix version upstream*. The
+  v0.0.7 audit had already verified this app's HS256-only signing never
+  touches ECDSA code -- which is exactly what made a drop-in migration
+  safe. Four changed lines in `app/security.py`, one dependency line,
+  and the flagged package is simply gone (along with a sparsely
+  maintained JWT library).
+- Vite 5 -> 8 (+ @vitejs/plugin-react 4 -> 6): resolves the `esbuild`
+  dev-server advisory that had been consciously deferred as
+  breaking-upgrade-only; `npm audit` now reports zero vulnerabilities
+  and the production build still passes (faster, too: ~0.7s vs ~2.3s).
+- Workflow runtimes: action majors bumped (checkout v5, setup-python v6,
+  setup-node v5) and CI Node 20 -> 22, addressing the Node 20 runner
+  deprecation warnings and Vite 8's engine floor in one move.
+- `SECURITY.md` and `frontend/README.md` updated so the accepted-risk
+  notes tell the full story: assessed first, eliminated after.
+
 ### Changed
 
 - Version bumped to 0.0.9 (backend config + frontend package).

@@ -21,8 +21,8 @@ jobs:
     name: Backend (pip-audit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install dependencies
@@ -36,19 +36,19 @@ jobs:
     name: Frontend (npm audit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "22"
       - name: Install dependencies
         working-directory: frontend
         run: npm install
       - name: Run npm audit
         working-directory: frontend
-        # --audit-level=high: the frontend/README.md documents one known
-        # moderate esbuild dev-server advisory that's deliberately
-        # deferred (dev-only, no fix without a breaking Vite 8 upgrade).
-        # Failing CI on that specific known/accepted issue on every run
-        # wouldn't tell anyone anything new; a *new* high/critical finding
-        # should still fail the build.
+        # --audit-level=high as policy: moderate dev-tooling advisories
+        # get triaged (assessed, documented, then fixed or consciously
+        # deferred) rather than auto-blocking every push; high/critical
+        # findings fail the build. As of the post-v0.0.9 dependency
+        # response the tree is fully clean -- this gate exists to catch
+        # the next disclosure.
         run: npm audit --audit-level=high
