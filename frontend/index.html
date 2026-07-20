@@ -1,9 +1,33 @@
 <!doctype html>
-<html lang="tr">
+<!-- lang was "tr" until the v0.1.1 accessibility audit: the UI is entirely
+     English, and a wrong lang makes screen readers pronounce everything
+     with the wrong rules. -->
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Lingua — AI Translation and Language Learning</title>
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f7fb" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12151f" />
+    <!-- Theme must be decided BEFORE first paint or dark-mode users get a
+         white flash on every load. Stored explicit choice wins; otherwise
+         follow the system. ThemeContext takes over after hydration. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("lingua_theme");
+          var theme =
+            stored === "dark" || stored === "light"
+              ? stored
+              : window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light";
+          document.documentElement.dataset.theme = theme;
+        } catch (e) {
+          /* storage blocked: default (light) tokens apply */
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

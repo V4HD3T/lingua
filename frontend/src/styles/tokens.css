@@ -10,9 +10,9 @@
   --accent-500: #d9a441;
   --accent-600: #b9863a;
   --accent-100: #f7e8cc;
-  --success-500: #2f9e63;
+  --success-500: #247b4d;  /* darkened in the v0.1.1 audit: original #2f9e63 measured 2.99 on --success-100 */
   --success-100: #e2f5ea;
-  --error-500: #d64545;
+  --error-500: #bc3c3c;  /* darkened in the v0.1.1 audit: original #d64545 failed AA both as text on --error-100 (3.66) and under light text when filled (4.09) */
   --error-100: #fbe6e6;
   --border: #e1e3ee;
   --text-primary: var(--ink-900);
@@ -113,4 +113,66 @@ textarea {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Dark theme (v0.1.1). The mechanism: the inline script in index.html sets
+   data-theme on <html> *before first paint* (stored choice, else system
+   preference), so there is no light-flash; ThemeContext keeps it in sync
+   afterwards. Every component already styles itself through these tokens,
+   so the theme is defined entirely here — pages don't know it exists.
+   color-scheme flips native UI (scrollbars, form controls, autofill). */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --ink-900: #e9ecf5;
+  --ink-800: #d9deed;
+  --ink-600: #b9c1da;
+  --ink-400: #7e88ab;
+  --paper-0: #12151f;
+  --paper-50: #191d2b;
+  --surface: #1f2436;
+  --accent-500: #e2b45f;
+  --accent-600: #edc57b;
+  --accent-100: #322b1a;
+  --success-500: #5ecb95;
+  --success-100: #16281e;
+  --error-500: #ee8686;
+  --error-100: #382023;
+  --border: #303752;
+  --text-secondary: #a8b0cb;
+  --text-on-accent: #201404;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5), 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* Accent-as-TEXT needs its own token: the brand amber (--accent-500/600)
+   was designed as a fill/highlight and fails WCAG AA as body-size text on
+   light surfaces (measured ~2.6:1). Anywhere amber text appears, use this. */
+:root {
+  --accent-text: #87621f;
+}
+[data-theme="dark"] {
+  --accent-text: #e8c07a;
+}
+
+/* Skip link (v0.1.1 accessibility round): first tabbable element on the
+   page, invisible until keyboard-focused. */
+.skipLink {
+  position: absolute;
+  top: -100%;
+  left: var(--space-4);
+  z-index: 1100;
+  background: var(--ink-900);
+  color: var(--paper-0);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+  text-decoration: none;
+  transition: top 0.15s ease-out;
+}
+
+.skipLink:focus {
+  top: var(--space-4);
 }

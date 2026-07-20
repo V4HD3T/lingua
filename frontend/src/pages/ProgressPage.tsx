@@ -6,9 +6,11 @@ import { getMyAchievements } from "../api/achievements";
 import { updateDailyGoal } from "../api/auth";
 import { LoadingState, ErrorState } from "../components/StatusMessage";
 import type { Achievement, UserStats, VocabularySuggestion } from "../types";
+import { useToast } from "../context/ToastContext";
 import styles from "./ProgressPage.module.css";
 
 export function ProgressPage() {
+  const toast = useToast();
   const [stats, setStats] = useState<UserStats | null>(null);
   const [suggestions, setSuggestions] = useState<VocabularySuggestion[] | null>(null);
   const [achievements, setAchievements] = useState<Achievement[] | null>(null);
@@ -44,6 +46,7 @@ export function ProgressPage() {
       await updateDailyGoal(parsed);
       setStats((prev) => (prev ? { ...prev, daily_goal: parsed } : prev));
       setIsEditingGoal(false);
+      toast.success("Daily goal updated");
     } catch {
       // leave the form open so the person can retry
       setGoalError("Couldn't save your goal. Please try again.");
@@ -106,6 +109,7 @@ export function ProgressPage() {
                 <div className={styles.goalEditRow}>
                   <input
                     type="number"
+                    aria-label="Daily review goal"
                     min={1}
                     max={200}
                     className={styles.goalInput}

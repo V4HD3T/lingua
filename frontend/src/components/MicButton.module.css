@@ -15,7 +15,7 @@
 
 .button:hover:not(:disabled) {
   border-color: var(--accent-500);
-  color: var(--accent-600);
+  color: var(--accent-text);
 }
 
 .button:disabled {
@@ -26,11 +26,11 @@
 .listening {
   background: var(--error-500);
   border-color: var(--error-500);
-  color: #fff;
+  color: var(--paper-0);
 }
 
 .listening:hover:not(:disabled) {
-  color: #fff;
+  color: var(--paper-0);
 }
 
 .pulse {

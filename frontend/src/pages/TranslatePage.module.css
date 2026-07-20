@@ -217,3 +217,10 @@
     font-size: 26px;
   }
 }
+
+.outputActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}

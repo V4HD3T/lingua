@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "../hooks/useSpeechSynthesis";
 import { MicButton } from "../components/MicButton";
+import { CopyButton } from "../components/CopyButton";
 import { SpeakerButton } from "../components/SpeakerButton";
 import { AchievementToast } from "../components/AchievementToast";
 import type { Achievement, IdiomWarning, Language } from "../types";
@@ -188,6 +189,7 @@ export function TranslatePage() {
           <div className={styles.column}>
             <textarea
               className={styles.textarea}
+              aria-label="Text to translate"
               placeholder={
                 sourceLang === AUTO_DETECT
                   ? "Type or say something — I'll figure out the language..."
@@ -214,7 +216,10 @@ export function TranslatePage() {
           </div>
 
           <div className={styles.column}>
-            <div className={styles.output}>
+            {/* Live region: the translation is the whole point of the
+                page, so screen readers hear it when it lands. aria-busy
+                marks the in-flight state. */}
+            <div className={styles.output} role="status" aria-live="polite" aria-busy={isTranslating}>
               {isTranslating && sourceText.trim() ? (
                 <span className={styles.placeholder}>translating...</span>
               ) : translatedText ? (
@@ -225,17 +230,20 @@ export function TranslatePage() {
                 </span>
               )}
             </div>
-            {voice.isSupported && translatedText && (
-              <div className={styles.cornerButtonWrapper}>
-                <SpeakerButton
-                  isSpeaking={voice.isSpeaking}
-                  onClick={() =>
-                    voice.isSpeaking
-                      ? voice.stop()
-                      : voice.speak(translatedText, targetLang)
-                  }
-                  title="Listen to the translation"
-                />
+            {translatedText && (
+              <div className={styles.outputActions}>
+                {voice.isSupported && (
+                  <SpeakerButton
+                    isSpeaking={voice.isSpeaking}
+                    onClick={() =>
+                      voice.isSpeaking
+                        ? voice.stop()
+                        : voice.speak(translatedText, targetLang)
+                    }
+                    title="Listen to the translation"
+                  />
+                )}
+                <CopyButton text={translatedText} label="Copy translation" />
               </div>
             )}
             {translatedText && confidence !== null && (

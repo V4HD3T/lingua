@@ -11,6 +11,83 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.1] — UX round: dark mode, toasts, clipboard, accessibility audit
+
+Pure frontend version. The headline is less "dark mode exists" and more
+what the accessibility audit dug up — including the fact that the *light*
+theme had been shipping WCAG failures since v0.0.2.
+
+### Added
+
+- **Dark mode**, defined entirely at the token layer: every component
+  already styled itself through `tokens.css` custom properties, so the
+  theme is one `[data-theme="dark"]` block — pages don't know it exists.
+  An inline script in `index.html` resolves the theme *before first
+  paint* (stored choice, else system preference; no white flash),
+  `color-scheme: dark` flips native controls, and the NavBar toggle
+  persists **only on explicit use** — someone who never touches the
+  switch keeps following their system preference instead of being locked
+  to a snapshot of it. One deliberate exception: the achievement chip is
+  pinned to its brand colors (navy + gold) in both themes, because
+  letting its tokens invert would have sunk the gold title to a measured
+  1.6:1.
+- **General toast system** (`ToastContext`, `useToast`): fixed-viewport,
+  auto-dismissing (success 4s, errors 7s — people need time to read what
+  went wrong), dismissible, announced via `aria-live` with `role="alert"`
+  escalation for errors. Coexists with `AchievementToast` on purpose:
+  that one is an inline, in-page celebration; this is the app-wide
+  transient channel. Wired to real events — copy actions, "Daily goal
+  updated", "Signed out" — not just built and left on a shelf.
+- **Copy to clipboard** (`CopyButton`): on the translation output and on
+  every history row; failure (blocked clipboard) reports via an error
+  toast instead of silently doing nothing.
+
+### Accessibility audit — the ledger
+
+Found and fixed:
+
+- `<html lang="tr">` on an entirely English UI — screen readers were
+  being told to pronounce everything with Turkish rules. Now `en`.
+- The translate textarea and the daily-goal input had no accessible
+  name (placeholder-only). Labeled.
+- No `<main>` landmark and no skip link; keyboard users had to tab
+  through the nav on every page. Both added.
+- The translation output — the entire point of the page — was never
+  announced to screen readers. Now `role="status"` + `aria-live="polite"`
+  + `aria-busy` while in flight.
+- Two files carried hardcoded `#fff` (dark-mode landmines); tokenized to
+  `--paper-0`, which also *improves* contrast on filled states in dark.
+- Brand amber as text failed AA everywhere it appeared (~2.6:1 on
+  white). New `--accent-text` token (`#87621f` light / `#e8c07a` dark),
+  swapped in at every amber-text site.
+- **The shipped light palette itself failed AA in five measured pairs**:
+  `error-500`-on-`error-100` 3.66, `success-500`-on-`success-100` 2.99,
+  light-text-on-filled error 4.09 and success 3.17, and the accent badge
+  4.43. Fixed by solver-computed darkening (`--error-500` → `#bc3c3c`,
+  `--success-500` → `#247b4d`) satisfying both text-on-tint and
+  filled-state constraints at once; all 30 audited pairs now pass in
+  both themes, with the rationale committed as comments in `tokens.css`.
+
+Verified already correct (worth recording): quiz radio groups use
+`fieldset`/`legend`; `LoadingState`/`ErrorState` carry
+`role="status"`/`role="alert"`; mic/speaker buttons have proper
+`aria-label` + `aria-pressed`; `:focus-visible` and a global
+`prefers-reduced-motion` rule were in place since v0.0.2.
+
+Deferred, on the record: per-page `document.title`; a real
+browser/axe/screen-reader pass (queued with Playwright in v0.1.2); the
+`theme-color` meta follows the system, not the manual toggle.
+
+### Honest limits
+
+- Verified by strict TypeScript build and static WCAG contrast
+  computation — no browser in this environment, so no rendered-pixel or
+  assistive-tech verification yet.
+
+### Changed
+
+- Version bumped to 0.1.1.
+
 ## [0.1.0] — Docker, Redis cache & first deploy
 
 The minor-version bump is earned: this is the release where the system

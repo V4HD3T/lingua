@@ -1,5 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { ThemeProvider } from "./context/ThemeContext";
+import { ToastProvider } from "./context/ToastContext";
 import { NavBar } from "./components/NavBar";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { TranslatePage } from "./pages/TranslatePage";
@@ -18,10 +20,18 @@ import { ReviewPage } from "./pages/ReviewPage";
 
 export function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <NavBar />
-        <Routes>
+    <ThemeProvider>
+      <ToastProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            {/* First tabbable element on every page (v0.1.1 a11y round):
+                keyboard users can jump past the navigation. */}
+            <a href="#main" className="skipLink">
+              Skip to main content
+            </a>
+            <NavBar />
+            <main id="main">
+              <Routes>
           <Route path="/" element={<TranslatePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
@@ -56,8 +66,11 @@ export function App() {
               </ProtectedRoute>
             }
           />
-        </Routes>
-      </AuthProvider>
-    </BrowserRouter>
+              </Routes>
+            </main>
+          </AuthProvider>
+        </BrowserRouter>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }

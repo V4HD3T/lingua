@@ -5,12 +5,16 @@
   margin-top: var(--space-4);
 }
 
+/* Deliberately theme-independent: this is the one "brand chip" in the
+   UI -- always deep navy with the gold badge title, in both themes. Using
+   theme tokens here would invert it in dark mode and sink the gold title
+   into a light background (measured ~1.6:1). */
 .toast {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  background: var(--ink-900);
-  color: var(--paper-0);
+  background: #171d33;
+  color: #f6f7fb;
   border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
   animation: slideIn 0.25s ease-out;
@@ -26,13 +30,13 @@
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 14px;
-  color: var(--accent-500);
+  color: #d9a441;
 }
 
 .description {
   display: block;
   font-size: 12px;
-  color: var(--paper-50);
+  color: #eef0f7;
   margin-top: 2px;
 }
 

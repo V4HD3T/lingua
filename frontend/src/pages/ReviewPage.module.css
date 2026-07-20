@@ -23,7 +23,7 @@
 
 .newBadge {
   background: var(--accent-100);
-  color: var(--accent-600);
+  color: var(--accent-text);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -58,7 +58,7 @@
 
 .cardTranslation {
   font-size: 20px;
-  color: var(--accent-600);
+  color: var(--accent-text);
   font-weight: 500;
 }
 
@@ -81,7 +81,7 @@
 
 .revealButton:hover {
   border-color: var(--accent-500);
-  color: var(--accent-600);
+  color: var(--accent-text);
 }
 
 .ratingRow {
@@ -122,7 +122,7 @@
 
 .again:hover:not(:disabled) {
   background: var(--error-500);
-  color: #fff;
+  color: var(--paper-0);
 }
 
 .good {
@@ -142,7 +142,7 @@
 
 .easy:hover:not(:disabled) {
   background: var(--success-500);
-  color: #fff;
+  color: var(--paper-0);
 }
 
 .emptyState {
@@ -165,7 +165,7 @@
 .browseLink {
   display: inline-block;
   margin-top: var(--space-4);
-  color: var(--accent-600);
+  color: var(--accent-text);
   font-weight: 500;
   text-decoration: none;
 }

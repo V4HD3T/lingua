@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchTranslationHistory } from "../api/translate";
+import { CopyButton } from "../components/CopyButton";
 import { LoadingState, ErrorState } from "../components/StatusMessage";
 import type { TranslateResult } from "../types";
 import styles from "./HistoryPage.module.css";
@@ -64,6 +65,9 @@ export function HistoryPage() {
             <div className={styles.textCol}>
               <span className={styles.langTag}>{item.target_lang}</span>
               <p>{item.translated_text}</p>
+            </div>
+            <div className={styles.rowCopy}>
+              <CopyButton text={item.translated_text} label="Copy translation" />
             </div>
           </div>
         ))}

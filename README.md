@@ -1,6 +1,6 @@
 # Lingua — AI Translation and Language Learning Platform
 
-**Version:** 0.1.0
+**Version:** 0.1.1
 
 A platform offering real-time translation and interactive language
 learning for multilingual users. Built as part of a university graduation
@@ -29,6 +29,7 @@ lives in [CHANGELOG.md](./CHANGELOG.md).
 | 0.0.8 | Test & CI infrastructure: pytest + coverage gate and frontend build on every push, app-wide rate limiting, paginated lists. |
 | 0.0.9 | Alembic migrations (+ drift test), served-set quiz grading (`QuizSession`), admin content API; post-release: python-jose→PyJWT and Vite 8 — both dependency audits clean. |
 | 0.1.0 | Ops: Docker + docker-compose (one command), Redis translation cache, CORS locked to the configured origin, deployment guide + Railway/Vercel configs. |
+| 0.1.1 | UX: dark mode (token-level, no-flash), general toast system, copy-to-clipboard, accessibility audit — incl. fixing five measured WCAG failures the light theme had shipped with. |
 
 ## Quick start
 
@@ -77,9 +78,10 @@ and architecture notes.
 - ✅ Test & CI infrastructure: pytest + coverage gate and frontend type-check/build on every push (`.github/workflows/ci.yml`), paginated list endpoints
 - ✅ Data layer & content ops: Alembic migrations (with a migration-drift test), served-set quiz grading via QuizSession, admin CRUD API for all course/quiz content (`scripts/make_admin.py` to promote)
 - ✅ Ops & deploy: Docker + docker-compose (one command), Redis translation cache with graceful degradation, CORS locked to the configured frontend origin, deployment guide + Railway/Vercel configs (`DEPLOYMENT.md`)
+- ✅ UX & accessibility: dark mode with pre-paint theme resolution, app-wide toast notifications, copy-to-clipboard, WCAG AA-audited palette (30/30 pairs, both themes), landmarks + skip link + labeled controls
 - ✅ AI/translation engine topic: complete except running the real NLLB model, which needs to happen on your own machine (this sandbox has no network access to huggingface.co)
 - ✅ Language learning/pedagogy topic: complete
 - ✅ Security topic: complete
-- ⏳ Up next: UX round — dark mode, a general toast system, copy-to-clipboard, accessibility audit (v0.1.1)
+- ⏳ Up next: test depth — frontend unit tests (Vitest), Playwright E2E, load testing (v0.1.2)
 
 (Full roadmap: `ARCHITECTURE.md` §6 · Full version history: `CHANGELOG.md` · Security review: `SECURITY.md`)

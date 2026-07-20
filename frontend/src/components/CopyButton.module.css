@@ -1,5 +1,4 @@
 .button {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -13,22 +12,7 @@
   flex-shrink: 0;
 }
 
-.button:hover:not(:disabled) {
+.button:hover {
   border-color: var(--accent-500);
   color: var(--accent-text);
-}
-
-.button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.speaking {
-  background: var(--accent-500);
-  border-color: var(--accent-500);
-  color: var(--text-on-accent);
-}
-
-.speaking:hover:not(:disabled) {
-  color: var(--text-on-accent);
 }

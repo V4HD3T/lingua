@@ -1,13 +1,17 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useToast } from "../context/ToastContext";
+import { ThemeToggle } from "./ThemeToggle";
 import styles from "./NavBar.module.css";
 
 export function NavBar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
 
   async function handleLogout() {
     await logout();
+    toast.success("Signed out");
     navigate("/");
   }
 
@@ -22,7 +26,7 @@ export function NavBar() {
           Lingua
         </NavLink>
 
-        <nav className={styles.nav}>
+        <nav className={styles.nav} aria-label="Main">
           <NavLink to="/" end className={linkClass}>
             Translate
           </NavLink>
@@ -47,6 +51,7 @@ export function NavBar() {
         </nav>
 
         <div className={styles.authArea}>
+          <ThemeToggle />
           {user ? (
             <>
               <span className={styles.username}>{user.username}</span>
