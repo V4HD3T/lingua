@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_name: str = "AI Translation and Language Learning Platform"
-    app_version: str = "0.1.1"
+    app_version: str = "0.1.2"
     database_url: str = "sqlite:///./app.db"
 
     secret_key: str = "change-this-for-development"
@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     # see app/services/translation_cache.py.
     redis_url: str = ""
     translation_cache_ttl_seconds: int = 604800  # 7 days
+
+    # Rate-limit budgets (v0.1.2): configurable so capacity/load testing
+    # (see loadtest/) can raise them per-run instead of hacking constants.
+    # Defaults unchanged from v0.0.8.
+    api_rate_limit_per_minute: int = 120
+    translate_rate_limit_per_minute: int = 30
 
     frontend_base_url: str = "http://localhost:5173"
 

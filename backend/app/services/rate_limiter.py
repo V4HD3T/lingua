@@ -22,6 +22,7 @@ from threading import Lock
 
 from fastapi import HTTPException, Request, status
 
+from app.config import settings
 from app.services.security_logging import log_event
 
 
@@ -105,8 +106,15 @@ def enforce_rate_limit(limiter: RateLimiter, key: str, endpoint: str) -> None:
         )
 
 
-# The backstop is deliberately generous (120/min ≈ 2 requests/second
-# sustained): it should never bother a real person clicking around, only
-# scripts hammering the API.
-api_rate_limiter = RateLimiter(max_attempts=120, window_seconds=60)
-translate_rate_limiter = RateLimiter(max_attempts=30, window_seconds=60)
+# The backstop default is deliberately generous (120/min ≈ 2 requests/
+# second sustained): it should never bother a real person clicking around,
+# only scripts hammering the API. Budgets come from settings as of v0.1.2
+# so a capacity test can raise them per-run (API_RATE_LIMIT_PER_MINUTE /
+# TRANSLATE_RATE_LIMIT_PER_MINUTE env vars) -- with defaults, a single-IP
+# load generator correctly slams into the limiter instead of measuring it.
+api_rate_limiter = RateLimiter(
+    max_attempts=settings.api_rate_limit_per_minute, window_seconds=60
+)
+translate_rate_limiter = RateLimiter(
+    max_attempts=settings.translate_rate_limit_per_minute, window_seconds=60
+)

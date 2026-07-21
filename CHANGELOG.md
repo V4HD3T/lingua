@@ -11,6 +11,58 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.2] — Test depth: frontend units, E2E, load
+
+The version where "tested" stops meaning "the backend is tested". Every
+layer now has its own suite, its own question, and — for the load layer —
+actual measured numbers. `TESTING.md` is the map (and closes the test-plan
+item on the graduation-deliverables list).
+
+### Added
+
+- **Frontend unit tests** (Vitest + React Testing Library, 16 tests):
+  first frontend tests in the project's history. Priority went to the
+  highest-risk client logic — `api/client`'s token refresh, including a
+  concurrency proof that N simultaneous 401s share exactly **one**
+  refresh call (single-use refresh tokens mean two racing rotations
+  would trip the backend's reuse detection and kill the session); toast
+  lifecycle and ARIA escalation; the persist-only-on-explicit-toggle
+  theme rule; the blocked-clipboard failure path; sentence building with
+  duplicate words. `vitest.config.ts` is separate from the build config
+  on purpose. One lesson encoded in a comment: plain `fireEvent` beats
+  `userEvent` where fake timers are in play — userEvent's internal
+  delays deadlock against a faked clock.
+- **Playwright E2E** (`frontend/e2e/`): boots the real backend (fresh
+  throwaway SQLite, seeded) and the Vite dev server, then drives
+  Chromium through the whole learner journey — login, live translation,
+  the session-graded quiz answered to 100%, history, dark-mode toggle.
+  Selectors ride the v0.1.1 accessibility work (labels, roles, fieldset
+  legends). The test user registers via API by design. **Environment
+  honesty:** the browser download is blocked in the local sandbox
+  (verified, not assumed), so the suite is authored here and *executed
+  in CI* — a new `e2e` job installs Chromium and uploads traces on
+  failure.
+- **Locust load testing** (`backend/loadtest/`) plus the knob that makes
+  it honest: rate-limit budgets moved to settings
+  (`API_RATE_LIMIT_PER_MINUTE`, `TRANSLATE_RATE_LIMIT_PER_MINUTE`,
+  defaults unchanged) because single-IP load generation and per-IP
+  limiting are fundamentally at odds. Both modes were actually run:
+  defaults → 227 requests, 152 × 429 after the first 76 served
+  (`/translate`'s budget first, then the global backstop; rejections
+  cost 1–5 ms) — the limiter verified under pressure; raised budgets →
+  349 requests, 0 failures, p50 16 ms / p95 93 ms at ~11.6 req/s
+  (mock service + SQLite baseline). All simulated users share one
+  pre-created account so the auth limiters don't eat the run.
+- **`TESTING.md`**: the four-layer strategy, how to run each, the real
+  numbers, and the gaps kept honest (register-form E2E, no axe/visual
+  automation, Postgres untested).
+- CI: `frontend-build` now runs the unit suite before the build; new
+  `e2e` job.
+
+### Changed
+
+- Version bumped to 0.1.2.
+
 ## [0.1.1] — UX round: dark mode, toasts, clipboard, accessibility audit
 
 Pure frontend version. The headline is less "dark mode exists" and more
