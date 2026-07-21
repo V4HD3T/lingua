@@ -35,20 +35,31 @@ logger = logging.getLogger(__name__)
 
 
 class TranslationCache:
-    def __init__(self, client, ttl_seconds: int):
+    def __init__(self, client, ttl_seconds: int, backend_id: str = "mock", version: int = 1):
         self._client = client  # a redis.Redis, or None when disabled
         self.ttl_seconds = ttl_seconds
+        self.backend_id = backend_id  # which translation service produced these entries
+        self.version = version  # manual invalidation knob
 
     @property
     def enabled(self) -> bool:
         return self._client is not None
 
-    @staticmethod
-    def _key(source_lang: str, target_lang: str, text: str) -> str:
+    def _key(self, source_lang: str, target_lang: str, text: str) -> str:
         # Hash the text: user input is unbounded and arbitrary; a digest
         # keeps keys small, safe, and uniform.
+        #
+        # The backend id and version in the prefix are load-bearing, not
+        # decoration: without them, every phrase translated by the mock
+        # service stays valid for the full 7-day TTL *after* the real NLLB
+        # model is switched on, and learners get served "[en->es] hello"
+        # as if it were a real translation. Switching backends now simply
+        # misses into a different keyspace.
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:32]
-        return f"translation:{source_lang}:{target_lang}:{digest}"
+        return (
+            f"translation:v{self.version}:{self.backend_id}:"
+            f"{source_lang}:{target_lang}:{digest}"
+        )
 
     def get(self, source_lang: str, target_lang: str, text: str) -> Optional[TranslationDetail]:
         if self._client is None:
@@ -92,8 +103,14 @@ class TranslationCache:
 def get_translation_cache() -> TranslationCache:
     """FastAPI dependency. lru_cache makes it a process-wide singleton, the
     same pattern as get_translation_service / get_email_service."""
+    backend_id = "mock" if settings.use_mock_translation else "nllb"
     if not settings.redis_url:
-        return TranslationCache(None, settings.translation_cache_ttl_seconds)
+        return TranslationCache(
+            None,
+            settings.translation_cache_ttl_seconds,
+            backend_id=backend_id,
+            version=settings.translation_cache_version,
+        )
 
     import redis  # imported lazily: not needed at all in the disabled case
 
@@ -103,4 +120,9 @@ def get_translation_cache() -> TranslationCache:
         socket_timeout=0.5,
         socket_connect_timeout=0.5,
     )
-    return TranslationCache(client, settings.translation_cache_ttl_seconds)
+    return TranslationCache(
+        client,
+        settings.translation_cache_ttl_seconds,
+        backend_id=backend_id,
+        version=settings.translation_cache_version,
+    )

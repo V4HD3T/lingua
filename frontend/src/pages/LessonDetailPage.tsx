@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getLesson, listVocabulary } from "../api/courses";
-import { getQuizByLesson } from "../api/quizzes";
+import { lessonHasQuiz } from "../api/quizzes";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { useSpeechSynthesis } from "../hooks/useSpeechSynthesis";
 import { MicButton } from "../components/MicButton";
@@ -45,9 +45,7 @@ export function LessonDetailPage() {
       .then(setVocabulary)
       .catch(() => setError("Something went wrong loading the vocabulary."));
 
-    getQuizByLesson(id)
-      .then(() => setHasQuiz(true))
-      .catch(() => setHasQuiz(false));
+    lessonHasQuiz(id).then(setHasQuiz);
   }, [lessonId]);
 
   async function practiceWord(item: VocabularyItem) {

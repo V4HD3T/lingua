@@ -208,3 +208,17 @@ def test_adaptive_quiz_hides_hard_questions_for_low_scorers(client, take_seed_qu
 def test_adaptive_quiz_shows_everything_for_anonymous_users(client):
     response = client.get("/lessons/1/quiz")
     assert len(response.json()["questions"]) == 5
+
+
+def test_anonymous_quiz_fetch_creates_no_session(client, session):
+    """Browsing a lesson page probes for a quiz. That probe is anonymous
+    precisely so it doesn't mint a throwaway QuizSession per page view --
+    with a growing catalogue that was unbounded write traffic from mere
+    reading."""
+    from sqlmodel import select
+
+    from app.models import QuizSession
+
+    for _ in range(5):
+        assert client.get("/lessons/1/quiz").status_code == 200
+    assert session.exec(select(QuizSession)).all() == []

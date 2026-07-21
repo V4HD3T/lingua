@@ -160,10 +160,11 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     # v0.1.0: the wildcard flagged in SECURITY.md is gone -- only the
-    # configured frontend origin may make credentialed browser calls.
-    # Local dev works out of the box (the default is the Vite dev URL);
-    # deployments set FRONTEND_BASE_URL to their real frontend origin.
-    allow_origins=[settings.frontend_base_url],
+    # configured origins may make credentialed browser calls. Deployments
+    # set CORS_ALLOWED_ORIGINS to their real frontend origin(s); the
+    # development default covers both spellings of the Vite dev server
+    # (see Settings.cors_origins).
+    allow_origins=settings.cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

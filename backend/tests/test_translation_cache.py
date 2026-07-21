@@ -124,3 +124,28 @@ def test_endpoint_survives_cache_outage(client):
         "/translate", json={"text": "hello", "source_lang": "en", "target_lang": "es"}
     )
     assert response.status_code == 200
+
+
+# --- cache namespace isolation (v0.1.3 scan) ---
+
+
+def test_entries_do_not_survive_a_translation_backend_switch():
+    """The mock service and the real NLLB model must not share a keyspace:
+    otherwise every phrase translated while USE_MOCK_TRANSLATION=true keeps
+    being served for the full 7-day TTL after the real model is switched
+    on."""
+    shared_redis = _StubRedis()
+    mock_cache = TranslationCache(shared_redis, 60, backend_id="mock", version=1)
+    mock_cache.set("en", "es", "hello", _detail())
+
+    real_cache = TranslationCache(shared_redis, 60, backend_id="nllb", version=1)
+    assert real_cache.get("en", "es", "hello") is None
+    assert mock_cache.get("en", "es", "hello") is not None  # its own namespace still hits
+
+
+def test_version_bump_invalidates_everything():
+    shared_redis = _StubRedis()
+    old = TranslationCache(shared_redis, 60, backend_id="mock", version=1)
+    old.set("en", "es", "hello", _detail())
+    new = TranslationCache(shared_redis, 60, backend_id="mock", version=2)
+    assert new.get("en", "es", "hello") is None

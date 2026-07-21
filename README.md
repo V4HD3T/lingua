@@ -72,7 +72,7 @@ and architecture notes.
 
 ## Status
 
-- ✅ Backend: auth (+ refresh tokens, email verification, password reset, rate limiting, daily goals), translation (+ confidence/alternatives/idiom warnings/language detection), courses/lessons (+ grammar/cultural notes), quizzes (4 types + adaptive difficulty), progress/streak, spaced repetition, personalized suggestions, achievement badges — 157 backend + 16 frontend tests passing
+- ✅ Backend: auth (+ refresh tokens, email verification, password reset, rate limiting, daily goals), translation (+ confidence/alternatives/idiom warnings/language detection), courses/lessons (+ grammar/cultural notes), quizzes (4 types + adaptive difficulty), progress/streak, spaced repetition, personalized suggestions, achievement badges — 168 backend + 16 frontend tests passing
 - ✅ Frontend: a working interface for every flow (React + TypeScript)
 - ✅ Speech: voice input (translation + pronunciation practice) and voice output (translations + vocabulary + listening quiz questions), both browser-based, no model download
 - ✅ Progress tracking: daily streak, daily review goal, per-course completion percentage, achievement badges (`/progress`)

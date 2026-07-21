@@ -30,6 +30,17 @@ def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     packs = available_packs()
 
+    # Fail loudly rather than exiting 0 having done nothing: a missing
+    # content directory (e.g. a container image that didn't ship it) used
+    # to look exactly like a successful import in deployment logs.
+    if not packs:
+        print(
+            f"No content packs found in {CONTENT_DIR}. "
+            "Is the content/ directory present in this environment?",
+            file=sys.stderr,
+        )
+        return 1
+
     if "--list" in sys.argv:
         print("Available content packs:")
         for path in packs:

@@ -26,7 +26,8 @@ root directory at `backend/`.
 | --- | --- | --- |
 | `SECRET_KEY` | output of `python -c "import secrets; print(secrets.token_urlsafe(64))"` | JWT signing. The app logs a loud warning if left on the default. |
 | `DATABASE_URL` | `sqlite:////data/app.db` **+ attach a volume mounted at `/data`** | Without a volume, SQLite lives on the container filesystem and every deploy wipes it. |
-| `FRONTEND_BASE_URL` | your Vercel URL, e.g. `https://lingua-xyz.vercel.app` | CORS allowlist (v0.1.0 removed the wildcard) **and** the base for verification/reset links in emails. |
+| `FRONTEND_BASE_URL` | your Vercel URL, e.g. `https://lingua-xyz.vercel.app` | Base for verification/reset links in emails. |
+| `CORS_ALLOWED_ORIGINS` | same Vercel URL (comma-separated if several) | Browser origins allowed to call the API. Setting it replaces the development defaults entirely — deployments get exactly what they ask for. |
 | `REDIS_URL` | provision the platform's Redis add-on and paste its URL | Optional -- the cache silently disables itself when unset. |
 | `USE_MOCK_TRANSLATION` | `true` for now | The real NLLB model needs ~3&nbsp;GB and a beefier instance; keep the mock until that's sized. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `SMTP_FROM_ADDRESS` | your mail provider's values | Unset = mock email service: verification/reset emails are logged, not sent. Fine for a demo, not for real users. |

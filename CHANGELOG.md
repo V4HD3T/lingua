@@ -61,6 +61,55 @@ learner with caps lock on gets scored correctly.
   verified to be a *meaningful* test (plain `.lower()` folds `MISIR` to
   `misir` and would fail it).
 
+### Fixed — post-release scan
+
+A full re-read of the codebase at v0.1.3, focused on the seams where the
+last three versions meet. Everything below was reproduced before being
+fixed, and each now has a regression test:
+
+- **CORS rejected the origin the E2E suite actually browses from.** To a
+  browser, `http://localhost:5173` and `http://127.0.0.1:5173` are
+  different origins. v0.1.0 locked the allowlist to the former;
+  v0.1.2's Playwright config browses the latter — so every API call in
+  the E2E journey would have been blocked (verified: no
+  `access-control-allow-origin` header, and preflight with an
+  `Authorization` header answered **400**). The suite could not have
+  passed in CI. Fixed with a proper allowlist:
+  `CORS_ALLOWED_ORIGINS` (comma-separated) wins outright in
+  deployments, while the development default covers the configured
+  frontend plus both spellings of the Vite dev server.
+- **The Docker image didn't ship the content packs.** v0.1.3 added
+  `backend/content/` and told operators, in `DEPLOYMENT.md`, to run
+  `scripts/import_content.py` inside the container — but the Dockerfile
+  (written in v0.1.0) never copied the directory. Worse than a plain
+  failure: `available_packs()` on a missing directory returns empty, so
+  the script **exited 0 having imported nothing**, and the deploy log
+  read as success. Fixed both halves: the image copies `content/`, and
+  the script now fails loudly when it finds no packs. A test asserts the
+  Dockerfile still carries the COPY.
+- **Cached translations would survive the switch to the real model.**
+  The cache key was `(source, target, sha256(text))` with no notion of
+  *which service produced the entry*, so every phrase translated by the
+  mock would keep being served as a genuine translation for the full
+  7-day TTL after NLLB is switched on — precisely the transition the
+  cache exists for. Keys now carry a backend id and a version
+  (`TRANSLATION_CACHE_VERSION` as a manual invalidation knob).
+- **Browsing lessons minted throwaway quiz sessions.** The lesson page
+  probed "does this lesson have a quiz?" with an *authenticated* call,
+  and authenticated quiz fetches record a `QuizSession` by design —
+  measured: 10 page views produced 10 sessions with zero quizzes taken.
+  Noted as harmless in v0.0.9 when there was one lesson; with the v0.1.3
+  content packs it became unbounded write traffic from pure reading. The
+  probe is now anonymous (existence doesn't depend on who's asking) and
+  creates no state.
+- **nginx hardening for the PWA**: an explicit `application/manifest+json`
+  MIME type (a manifest served as `application/octet-stream` is ignored
+  by browsers, silently costing installability), plus `no-cache` on
+  `index.html` and `sw.js` — a cached shell pins users to a stale asset
+  manifest and a cached service worker means the update prompt never
+  appears no matter how often the app is redeployed.
+- 11 new tests (168 total).
+
 ### Changed
 
 - Version bumped to 0.1.3.

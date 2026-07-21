@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # see app/services/translation_cache.py.
     redis_url: str = ""
     translation_cache_ttl_seconds: int = 604800  # 7 days
+    # Bump to invalidate every cached translation at once (e.g. after a
+    # model or post-processing change that isn't captured by the backend
+    # id below).
+    translation_cache_version: int = 1
 
     # Rate-limit budgets (v0.1.2): configurable so capacity/load testing
     # (see loadtest/) can raise them per-run instead of hacking constants.
@@ -45,6 +49,30 @@ class Settings(BaseSettings):
     translate_rate_limit_per_minute: int = 30
 
     frontend_base_url: str = "http://localhost:5173"
+
+    # CORS allowlist, comma-separated. Empty = development defaults (see
+    # Settings.cors_origins). Production sets this explicitly and gets
+    # exactly what it asks for -- no dev origins leak into a deployment.
+    cors_allowed_origins: str = ""
+
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Origins allowed to make browser calls to this API.
+
+        The 127.0.0.1 entry is not redundant: to a browser,
+        http://localhost:5173 and http://127.0.0.1:5173 are *different
+        origins*, and either spelling is a normal way to reach the Vite
+        dev server (Playwright uses the numeric one). Allowing only the
+        one broke every cross-origin call from the other -- silently, in
+        the browser, which is the worst place to debug it."""
+        if self.cors_allowed_origins.strip():
+            return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]
+        return list(
+            dict.fromkeys(
+                [self.frontend_base_url, "http://localhost:5173", "http://127.0.0.1:5173"]
+            )
+        )
 
 
 settings = Settings()

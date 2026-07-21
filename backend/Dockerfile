@@ -16,6 +16,11 @@ COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini .
 COPY scripts ./scripts
+# Content packs ship with the image: DEPLOYMENT.md tells operators to run
+# scripts/import_content.py inside the container, and without this the
+# script finds an empty directory and reports success having imported
+# nothing.
+COPY content ./content
 
 # Non-root user; /data is the mount point for a persistent SQLite volume
 # (the image default DATABASE_URL=sqlite:///./app.db would live and die
