@@ -26,6 +26,8 @@ from app.services.email_service import EmailService, get_email_service
 from app.services.rate_limiter import (
     client_ip as _client_ip,
     enforce_rate_limit as _rate_limit,
+    login_ip_rate_limiter,
+    login_key as _login_key,
     login_rate_limiter,
     password_reset_rate_limiter,
     register_rate_limiter,
@@ -137,14 +139,27 @@ def login(
     session: Session = Depends(get_session),
 ):
     ip = _client_ip(request)
-    _rate_limit(login_rate_limiter, ip, "login")
+    # Two budgets, because they stop different attacks (v0.1.6). The pair
+    # budget bounds how hard one account can be hammered from one address;
+    # the address budget bounds how much guessing that address can do in
+    # total, which is what stops spraying one password across many
+    # usernames. See app/services/rate_limiter.py: login_key.
+    key = _login_key(ip, form_data.username)
+    _rate_limit(login_ip_rate_limiter, ip, "login_ip", record=False)
+    _rate_limit(login_rate_limiter, key, "login")
 
     user = session.exec(select(User).where(User.username == form_data.username)).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
+        # Charged only on failure, so simply logging in -- however often --
+        # never eats into the address budget.
+        login_ip_rate_limiter.record(ip)
         log_event("login_failed", username=form_data.username, ip=ip)
         raise HTTPException(status_code=401, detail="Incorrect username or password")
 
-    login_rate_limiter.reset(ip)
+    # Clears this pair only. Previously this reset the whole address, so
+    # an attacker holding any account of their own could wipe out a
+    # victim's accumulated failures by logging in as themselves.
+    login_rate_limiter.reset(key)
     log_event("login_succeeded", user_id=user.id, username=user.username, ip=ip)
     return _issue_tokens(user, session)
 

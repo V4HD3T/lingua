@@ -114,6 +114,34 @@ class RateLimiter:
         with self._lock:
             return len(self._attempts)
 
+    def is_exhausted(self, key: str) -> bool:
+        """True if `key` is out of budget, **without** recording an
+        attempt (v0.1.6).
+
+        The pair to `record()`: together they express "only some outcomes
+        count against this budget", which `check()` can't, since it always
+        records. The login flow uses them to charge an IP for failed
+        logins only -- see app/routers/auth.py.
+
+        Reads with .get() rather than indexing so that merely asking the
+        question doesn't create a table entry for an unseen key.
+        """
+        now = datetime.now(timezone.utc)
+        cutoff = now - self.window
+        with self._lock:
+            recent = [t for t in self._attempts.get(key, []) if t > cutoff]
+            return len(recent) >= self.max_attempts
+
+    def record(self, key: str) -> None:
+        """Records an attempt against `key` without testing the budget.
+        See is_exhausted()."""
+        now = datetime.now(timezone.utc)
+        cutoff = now - self.window
+        with self._lock:
+            recent = [t for t in self._attempts[key] if t > cutoff]
+            recent.append(now)
+            self._attempts[key] = recent
+
     def reset(self, key: str) -> None:
         """Clears attempts for `key` -- e.g. call this on a successful
         login so a legitimate user who mistyped their password a couple
@@ -134,9 +162,63 @@ class RateLimiter:
 # Separate limiter instances so login attempts and registration attempts
 # don't share a budget -- a burst of signups shouldn't lock out login, or
 # vice versa.
+#
+# login_rate_limiter is keyed per (address, username) as of v0.1.6, not
+# per address -- see login_key() below and the two-budget note under
+# login_ip_rate_limiter.
 login_rate_limiter = RateLimiter(max_attempts=5, window_seconds=60)
 register_rate_limiter = RateLimiter(max_attempts=5, window_seconds=60)
 password_reset_rate_limiter = RateLimiter(max_attempts=3, window_seconds=300)
+
+# Failed logins from one address, across every username it tries (v0.1.6).
+#
+# This exists because of what fixing the reset bypass opened up. Keying
+# the budget above per (address, username) is what stops a successful
+# login from clearing an unrelated account's failures -- but on its own it
+# would also mean one address gets 5 guesses *per username*, i.e. no cap
+# at all on password spraying (one common password against thousands of
+# accounts). The two budgets answer different attacks and are both needed:
+# the pair budget bounds how hard one account can be hammered, this one
+# bounds how much guessing one address can do in total.
+#
+# Only *failures* are charged here, and it is never reset. That's what
+# keeps it safe to set tight: people logging in successfully never touch
+# it, so a shared address -- office NAT, mobile CGNAT, a household --
+# doesn't accumulate a budget just by being busy. The global backstop in
+# GeneralRateLimitMiddleware (120/min) is the only other thing standing
+# between spraying and the password hashes, and 120 guesses a minute is
+# not a limit worth relying on.
+login_ip_rate_limiter = RateLimiter(
+    max_attempts=settings.login_ip_failure_limit_per_minute, window_seconds=60
+)
+
+
+def login_key(ip: str, username: str) -> str:
+    """Rate-limit key for one account being tried from one address
+    (v0.1.6).
+
+    Before this, login was limited per address alone, and a successful
+    login reset that address's whole budget. An attacker with any account
+    of their own could therefore spend four guesses on a victim, log in as
+    themselves to zero the counter, and repeat -- turning a 5/min limit
+    into roughly the global backstop's 120/min. Keying on the pair means
+    logging in as yourself clears only your own pair.
+
+    The username is case-folded so that varying capitalisation can't mint
+    fresh budgets. Today's lookup is case-sensitive, so "Victim" simply
+    finds no user -- but `=` on text is case-*insensitive* under some
+    collations (MySQL's default, Postgres with citext), and DEPLOYMENT.md
+    already points at Postgres. Folding costs nothing and removes the
+    dependency on that staying true. Two distinct usernames folding
+    together is harmless: they share a budget, which over-limits rather
+    than under-limits.
+
+    NUL separates the parts because a username can contain anything --
+    login takes it straight off an OAuth2 form with no validation -- and
+    an ordinary separator like ":" would let one pair's key collide with
+    another's.
+    """
+    return f"{ip}\x00{username.casefold()}"
 
 
 # --- Shared enforcement + app-wide limiters (v0.0.8) -------------------------
@@ -233,11 +315,20 @@ def client_ip(request: Request) -> str:
     return _parse_forwarded_host(chain[-hops]) or peer
 
 
-def enforce_rate_limit(limiter: RateLimiter, key: str, endpoint: str) -> None:
+def enforce_rate_limit(
+    limiter: RateLimiter, key: str, endpoint: str, *, record: bool = True
+) -> None:
     """Raises 429 (with a Retry-After hint) when `key` is over budget on
     `limiter`. Lives in the service rather than a router so the response
-    shape stays identical everywhere it's used."""
-    if not limiter.check(key):
+    shape stays identical everywhere it's used.
+
+    `record=False` tests the budget without spending from it, for callers
+    that decide afterwards whether this attempt counts -- the login flow
+    charges its per-address budget only for failures (v0.1.6). Those
+    callers are responsible for calling limiter.record() themselves.
+    """
+    over_budget = limiter.is_exhausted(key) if not record else not limiter.check(key)
+    if over_budget:
         log_event("rate_limit_exceeded", endpoint=endpoint, key=key)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,

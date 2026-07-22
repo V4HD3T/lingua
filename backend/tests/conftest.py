@@ -8,6 +8,7 @@ from app.main import app, seed_data
 from app.services.email_service import get_email_service
 from app.services.rate_limiter import (
     api_rate_limiter,
+    login_ip_rate_limiter,
     login_rate_limiter,
     password_reset_rate_limiter,
     register_rate_limiter,
@@ -24,6 +25,7 @@ def _reset_rate_limiters():
     and since v0.0.8's app-wide backstop counts *every* request, the whole
     suite would trip it within seconds."""
     login_rate_limiter.clear_all()
+    login_ip_rate_limiter.clear_all()
     register_rate_limiter.clear_all()
     password_reset_rate_limiter.clear_all()
     api_rate_limiter.clear_all()
