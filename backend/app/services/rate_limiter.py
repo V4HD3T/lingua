@@ -16,9 +16,11 @@ exactly how your own brute-force protection works matters more here than
 saving a dozen lines of code.
 """
 
+import ipaddress
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from threading import Lock
+from typing import Optional
 
 from fastapi import HTTPException, Request, status
 
@@ -86,11 +88,86 @@ password_reset_rate_limiter = RateLimiter(max_attempts=3, window_seconds=300)
 # inference and is therefore the most expensive thing an abuser can call.
 
 
+def _parse_forwarded_host(value: str) -> Optional[str]:
+    """Extracts a bare IP address from a single X-Forwarded-For entry.
+
+    Entries are usually bare addresses, but a proxy may append the source
+    port ("1.2.3.4:51234", "[2001:db8::1]:443"). Returns None for
+    anything that doesn't parse as an IP address -- see client_ip() for
+    why refusing to guess matters here.
+
+    Returning the *parsed* address rather than the original string also
+    normalizes it, which stops one client from occupying many rate-limit
+    buckets just by respelling its own IPv6 address ("::1" and
+    "0:0:0:0:0:0:0:1" are the same host and must map to the same key).
+    """
+    value = value.strip()
+    if not value:
+        return None
+
+    if value.startswith("["):
+        # Bracketed IPv6, with or without a trailing ":port".
+        end = value.find("]")
+        if end == -1:
+            return None
+        candidate = value[1:end]
+    elif value.count(":") == 1:
+        # Exactly one colon means IPv4 with a port; a bare IPv6 address
+        # always has more, and never carries a port unbracketed.
+        candidate = value.rsplit(":", 1)[0]
+    else:
+        candidate = value
+
+    try:
+        return str(ipaddress.ip_address(candidate))
+    except ValueError:
+        return None
+
+
 def client_ip(request: Request) -> str:
-    """Best-effort per-client key for rate limiting. Behind a reverse
-    proxy this is the proxy's address unless forwarded headers are
-    configured (a deployment concern, noted for the v0.1.0 deploy guide)."""
-    return request.client.host if request.client else "unknown"
+    """Per-client key for rate limiting and security logging.
+
+    Resolved here rather than by uvicorn's --proxy-headers (v0.1.4).
+    That flag was previously passed as `--forwarded-allow-ips "*"`, which
+    makes uvicorn rewrite `request.client` from the **leftmost**
+    X-Forwarded-For entry -- the one furthest from the proxy and written
+    entirely by whoever sent the request. Every per-IP budget in this
+    module (login 5/min, register, password reset, /translate, and the
+    app-wide backstop) was therefore bypassable by putting a different
+    random address in a header on each request, and the `ip=` field in
+    the security log was attacker-authored.
+
+    The correct entry is counted from the *right*: each proxy appends the
+    address of its own immediate peer, so with `trusted_proxy_hops`
+    proxies in front, the last one to write was the outermost and the
+    real client sits `trusted_proxy_hops` from the end. Anything to the
+    left of it arrived with the request and is ignored.
+
+    Falls back to the TCP peer address whenever the header can't be
+    trusted to mean what the configuration claims -- an unparseable entry,
+    or a chain shorter than the configured hop count (which means the
+    request did not come through the expected proxies). That fallback
+    lumps such requests together under the proxy's own address, i.e. it
+    over-limits rather than under-limits: the safe direction for a
+    misconfiguration to fail in.
+    """
+    peer = request.client.host if request.client else "unknown"
+
+    hops = settings.trusted_proxy_hops
+    if hops <= 0:
+        return peer
+
+    # A request can carry several X-Forwarded-For headers; together they
+    # form one chain, in order.
+    chain = [
+        entry
+        for header in request.headers.getlist("x-forwarded-for")
+        for entry in header.split(",")
+    ]
+    if len(chain) < hops:
+        return peer
+
+    return _parse_forwarded_host(chain[-hops]) or peer
 
 
 def enforce_rate_limit(limiter: RateLimiter, key: str, endpoint: str) -> None:

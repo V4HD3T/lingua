@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_name: str = "AI Translation and Language Learning Platform"
-    app_version: str = "0.1.3"
+    app_version: str = "0.1.4"
     database_url: str = "sqlite:///./app.db"
 
     secret_key: str = "change-this-for-development"
@@ -47,6 +47,28 @@ class Settings(BaseSettings):
     # Defaults unchanged from v0.0.8.
     api_rate_limit_per_minute: int = 120
     translate_rate_limit_per_minute: int = 30
+
+    # How many trusted reverse proxies sit in front of this app (v0.1.4).
+    #
+    # 0 (default): none. The TCP peer address *is* the client -- true for
+    # local dev, `docker compose up` (the browser calls :8000 directly),
+    # and any direct exposure.
+    #
+    # N > 0: the rightmost N entries of X-Forwarded-For were appended by
+    # proxies you control, so the real client is the Nth entry from the
+    # right; everything left of it was written by the client and is
+    # ignored. Railway/Render/Fly each put exactly one proxy in front --
+    # set this to 1 there (see DEPLOYMENT.md).
+    #
+    # Why a hop count rather than a trusted-proxy IP allowlist: those
+    # platforms' proxy addresses are internal and not documented as
+    # stable, so an accurate allowlist can't actually be written. And the
+    # thing this replaces -- uvicorn's `--forwarded-allow-ips "*"` -- is
+    # worse than either: it trusts the *leftmost* X-Forwarded-For entry,
+    # which is entirely client-supplied, so anyone could hand themselves
+    # a fresh login/translate/global rate-limit budget on every single
+    # request just by varying a header.
+    trusted_proxy_hops: int = 0
 
     frontend_base_url: str = "http://localhost:5173"
 

@@ -29,8 +29,34 @@ root directory at `backend/`.
 | `FRONTEND_BASE_URL` | your Vercel URL, e.g. `https://lingua-xyz.vercel.app` | Base for verification/reset links in emails. |
 | `CORS_ALLOWED_ORIGINS` | same Vercel URL (comma-separated if several) | Browser origins allowed to call the API. Setting it replaces the development defaults entirely — deployments get exactly what they ask for. |
 | `REDIS_URL` | provision the platform's Redis add-on and paste its URL | Optional -- the cache silently disables itself when unset. |
+| `TRUSTED_PROXY_HOPS` | `1` on all three platforms | **Set this, or rate limiting counts every visitor as one client.** All three terminate TLS at their own proxy, so the app never sees the real client address on the socket — it has to read it out of `X-Forwarded-For`. See below. |
 | `USE_MOCK_TRANSLATION` | `true` for now | The real NLLB model needs ~3&nbsp;GB and a beefier instance; keep the mock until that's sized. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `SMTP_FROM_ADDRESS` | your mail provider's values | Unset = mock email service: verification/reset emails are logged, not sent. Fine for a demo, not for real users. |
+
+**Counting proxy hops correctly** (`TRUSTED_PROXY_HOPS`): set it to the
+number of proxies **you** control between the internet and the container.
+Each one appends the address it received the request from, so the app
+takes the Nth entry from the *right* of `X-Forwarded-For` and ignores
+everything to its left — that part arrived with the request and anyone
+can write it.
+
+- Railway / Render / Fly, nothing else in front: **1**.
+- A CDN (Cloudflare, CloudFront) in front of one of those: **2**.
+- Reachable directly, no proxy: **0** (the default — the socket address
+  is already the client's).
+
+Getting it **too low** is the safe direction to be wrong in: the app
+falls back to the peer address, so everyone shares one rate-limit bucket
+and legitimate users start seeing 429s — visible, annoying, harmless.
+Getting it **too high** is the dangerous one: the app starts reading
+entries the caller wrote, and per-IP limits become bypassable. When
+unsure, count low and check step 6 of the post-deploy checklist.
+
+> *Removed in v0.1.4:* the image no longer passes uvicorn
+> `--forwarded-allow-ips "*"`. That made uvicorn believe the *leftmost*
+> `X-Forwarded-For` entry — the one the caller writes — so a random header
+> per request bought a fresh login/translate/global budget every time. If
+> you carried that flag into your own start command, drop it.
 
 **Postgres instead of SQLite** (recommended once real users exist):
 uncomment `psycopg2-binary` in `backend/requirements.txt`, set
@@ -83,6 +109,13 @@ Idempotent, so re-running after a redeploy is safe. See
 5. The app is installable: open the deployed frontend on a phone and
    check the browser offers "Add to home screen" (PWA manifest + service
    worker are served over HTTPS).
-6. Rate limiting sees real client IPs: hit an auth endpoint 6x and check
-   the 429 logs a real address, not the proxy's (the Dockerfile's
-   `--proxy-headers` handles this on Railway/Render/Fly).
+6. Rate limiting sees real client IPs — check **both** directions, since
+   each failure mode is invisible from the other side:
+   - Hit an auth endpoint 6x. The 6th returns 429, and the
+     `rate_limit_exceeded` log line shows a real client address rather
+     than the platform's internal proxy address. If it shows the proxy,
+     `TRUSTED_PROXY_HOPS` is too low.
+   - Repeat while sending a junk `X-Forwarded-For: 1.2.3.4` header that
+     changes every request. You must **still** get a 429 at the same
+     point. If the limit never trips, `TRUSTED_PROXY_HOPS` is too high
+     and the app is reading caller-supplied entries.

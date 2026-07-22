@@ -1,6 +1,10 @@
 import re
 
+from starlette.requests import Request
+
+from app.config import settings
 from app.services.email_service import get_email_service
+from app.services.rate_limiter import client_ip
 
 
 def _register_and_login(client, username="secuser", email="secuser@example.com", password="password1234"):
@@ -356,3 +360,132 @@ def test_auth_rate_limit_response_includes_retry_after(client):
     blocked = client.post("/auth/login", data={"username": "ghost", "password": "wrong-password"})
     assert blocked.status_code == 429
     assert "Retry-After" in blocked.headers
+
+
+# --- v0.1.4: which address rate limiting actually keys on -------------------
+#
+# The bug: the image ran uvicorn with `--forwarded-allow-ips "*"`, which
+# rewrites request.client from the *leftmost* X-Forwarded-For entry -- a
+# value the caller writes. Sending a different one per request handed the
+# caller a fresh budget on every per-IP limiter in the deployed app.
+#
+# Note on what these can and can't prove: uvicorn's ProxyHeadersMiddleware
+# is installed by the *server*, not by app.main:app, so TestClient never
+# runs it and cannot reproduce the original bypass -- these tests would
+# have passed before the fix too. The flag itself is guarded where it
+# actually lives, in tests/test_deployment_contracts.py. What's pinned
+# here is the app-side resolution that replaced it: which entry of the
+# chain becomes the rate-limit key, and that an unconfigured deployment
+# ignores the header completely.
+
+
+PEER = "203.0.113.7"  # the TCP peer -- in production, the proxy
+
+
+def _request(peer=PEER, xff=None):
+    """A Starlette Request with just enough scope for client_ip().
+
+    `xff` may be a string (one header) or a list (several, as a client can
+    legally send).
+    """
+    headers = []
+    if xff is not None:
+        for value in [xff] if isinstance(xff, str) else xff:
+            headers.append((b"x-forwarded-for", value.encode()))
+    return Request(
+        {"type": "http", "method": "GET", "path": "/", "headers": headers,
+         "client": (peer, 443) if peer else None}
+    )
+
+
+def test_forwarded_header_is_ignored_without_configured_proxies():
+    # The default. No proxy is declared, so the header carries no
+    # authority no matter what it says.
+    assert client_ip(_request(xff="1.2.3.4")) == PEER
+
+
+def test_one_proxy_takes_the_entry_that_proxy_appended(monkeypatch):
+    # This is the whole fix: the proxy appends its own peer *last*, so
+    # the rightmost entry is the only trustworthy one. "9.9.9.9" here is
+    # the attacker's own invention, sent to be picked up as the client.
+    monkeypatch.setattr(settings, "trusted_proxy_hops", 1)
+    assert client_ip(_request(xff="9.9.9.9, 198.51.100.23")) == "198.51.100.23"
+
+
+def test_two_proxies_count_further_in_from_the_right(monkeypatch):
+    # CDN -> load balancer -> app: the LB appended the CDN's address, the
+    # CDN appended the real client's.
+    monkeypatch.setattr(settings, "trusted_proxy_hops", 2)
+    chain = "9.9.9.9, 198.51.100.23, 192.0.2.60"
+    assert client_ip(_request(xff=chain)) == "198.51.100.23"
+
+
+def test_chain_split_across_several_headers_is_one_chain(monkeypatch):
+    monkeypatch.setattr(settings, "trusted_proxy_hops", 1)
+    assert client_ip(_request(xff=["9.9.9.9", "198.51.100.23"])) == "198.51.100.23"
+
+
+def test_chain_shorter_than_configured_hops_falls_back_to_peer(monkeypatch):
+    # The request didn't come through the proxies the config promises, so
+    # the header proves nothing. Falling back to the peer over-limits
+    # (everyone shares one bucket) instead of under-limiting.
+    monkeypatch.setattr(settings, "trusted_proxy_hops", 2)
+    assert client_ip(_request(xff="198.51.100.23")) == PEER
+    assert client_ip(_request(xff=None)) == PEER
+
+
+def test_unparseable_entry_falls_back_to_peer(monkeypatch):
+    # Never let an arbitrary string become a rate-limit key or land in a
+    # security log line as `ip=`.
+    monkeypatch.setattr(settings, "trusted_proxy_hops", 1)
+    for junk in ("not-an-ip", "", "127.0.0.1.5", "<script>", "1.2.3.4 5.6.7.8"):
+        assert client_ip(_request(xff=f"9.9.9.9, {junk}")) == PEER
+
+
+def test_ports_are_stripped_from_forwarded_entries(monkeypatch):
+    monkeypatch.setattr(settings, "trusted_proxy_hops", 1)
+    assert client_ip(_request(xff="198.51.100.23:51234")) == "198.51.100.23"
+    assert client_ip(_request(xff="[2001:db8::1]:443")) == "2001:db8::1"
+    assert client_ip(_request(xff="2001:db8::1")) == "2001:db8::1"
+
+
+def test_respelling_an_ipv6_address_does_not_buy_a_second_budget(monkeypatch):
+    # Same host, two spellings. Without normalization these would be two
+    # separate dict keys, i.e. two separate rate-limit budgets.
+    monkeypatch.setattr(settings, "trusted_proxy_hops", 1)
+    assert client_ip(_request(xff="2001:db8:0:0:0:0:0:1")) == client_ip(
+        _request(xff="2001:db8::1")
+    )
+
+
+def test_varying_the_forwarded_header_cannot_dodge_the_login_limiter(client):
+    """End to end through the real app and middleware stack: with no
+    proxy configured, a caller inventing a new address per request must
+    still land in the same bucket."""
+    client.post(
+        "/auth/register",
+        json={"username": "spoofed", "email": "spoofed@example.com", "password": "correct-password"},
+    )
+    statuses = [
+        client.post(
+            "/auth/login",
+            data={"username": "spoofed", "password": "wrong-password"},
+            headers={"X-Forwarded-For": f"10.0.0.{i}"},
+        ).status_code
+        for i in range(8)
+    ]
+    assert 429 in statuses, f"login limiter never engaged: {statuses}"
+
+
+def test_varying_the_forwarded_header_cannot_dodge_the_translate_limiter(client, monkeypatch):
+    from app.services.rate_limiter import translate_rate_limiter
+
+    monkeypatch.setattr(translate_rate_limiter, "max_attempts", 3)
+    payload = {"text": "hello", "source_lang": "en", "target_lang": "es"}
+    statuses = [
+        client.post(
+            "/translate", json=payload, headers={"X-Forwarded-For": f"10.0.0.{i}"}
+        ).status_code
+        for i in range(6)
+    ]
+    assert 429 in statuses, f"translate limiter never engaged: {statuses}"

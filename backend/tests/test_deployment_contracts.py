@@ -72,6 +72,33 @@ def test_content_packs_are_present_and_discoverable():
     assert available_packs(), "no content packs found"
 
 
+# --- the image must not hand X-Forwarded-For back to uvicorn (v0.1.4) ------
+
+
+def test_docker_image_does_not_blanket_trust_forwarded_headers():
+    """`--forwarded-allow-ips "*"` makes uvicorn overwrite request.client
+    with the leftmost X-Forwarded-For entry -- which the caller writes.
+    That turned every per-IP rate limit into a suggestion. The app reads
+    the chain itself now (TRUSTED_PROXY_HOPS); this guards against the
+    flag being reinstated as an apparently-innocent 'see real client IPs
+    behind the proxy' fix."""
+    dockerfile = (BACKEND_DIR / "Dockerfile").read_text()
+    cmd = [line for line in dockerfile.splitlines() if line.startswith("CMD")]
+    assert cmd, "no CMD line found in the Dockerfile"
+    assert "--forwarded-allow-ips" not in cmd[0], (
+        "uvicorn is trusting forwarded headers again -- per-IP rate limiting "
+        "is only as trustworthy as whatever this flag allows"
+    )
+
+
+def test_deployment_guide_documents_the_proxy_hop_setting():
+    """The old guide told operators the Dockerfile's --proxy-headers
+    handled real client IPs for them. It no longer does, and a deployment
+    that misses this silently rate-limits every visitor as one client."""
+    guide = (BACKEND_DIR.parent / "DEPLOYMENT.md").read_text(encoding="utf-8")
+    assert "TRUSTED_PROXY_HOPS" in guide
+
+
 def test_docker_image_ships_the_content_directory():
     """DEPLOYMENT.md instructs operators to run scripts/import_content.py
     inside the backend container. If the image doesn't carry content/, the

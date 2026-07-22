@@ -11,6 +11,59 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.4] — Security review follow-up (in progress)
+
+A fresh adversarial read of the codebase at v0.1.3, working through the
+findings one at a time. This section grows as each is fixed.
+
+### Fixed
+
+- **Every per-IP rate limit could be bypassed with a forged header.**
+  The image ran uvicorn with `--forwarded-allow-ips "*"`, on the
+  reasoning that Railway/Render/Fly always have their proxy in front so
+  trusting it is safe. The flag doesn't mean that. With `"*"`, uvicorn
+  rewrites `request.client` from the **leftmost** `X-Forwarded-For`
+  entry — the end of the chain furthest from the proxy, written by
+  whoever sent the request. Since `client_ip()` keys on
+  `request.client.host`, a different random address per request bought a
+  fresh budget on *every* limiter in the app: login's 5/min brute-force
+  protection, register, password reset, `/translate`, and the app-wide
+  backstop. It also meant the `ip=` field in every security log line was
+  attacker-authored, and — because `RateLimiter` never evicts keys — that
+  a single caller could grow the limiter's dict without bound.
+
+  The header is now read by the app itself (`client_ip()` in
+  `app/services/rate_limiter.py`) and counted from the **right**: each
+  proxy appends the address of its own immediate peer, so with
+  `TRUSTED_PROXY_HOPS` proxies in front, the real client is that many
+  entries from the end and everything to the left is ignored. Entries
+  must parse as IP addresses — an unparseable one, or a chain shorter
+  than the configured hop count, falls back to the socket peer, which
+  over-limits rather than under-limits. Parsed addresses are also
+  normalized, so respelling an IPv6 address doesn't buy a second budget.
+
+  `TRUSTED_PROXY_HOPS` defaults to **0** (no proxy — correct for local
+  dev and `docker compose`, where the browser reaches the backend
+  directly). Deployments behind one proxy set 1; `DEPLOYMENT.md` explains
+  how to count, which direction is safe to get wrong, and how to verify
+  both failure modes after deploying — the old guide asserted the
+  Dockerfile "handles this", which was exactly the misreading that caused
+  the bug. The uvicorn flags are gone from the image; nothing else needed
+  them, since this app reads `request.url.path` only and builds no
+  absolute URLs.
+
+  Test coverage, and its honest limit: the resolution logic is pinned
+  directly (which entry becomes the key, ports stripped, IPv6 normalized,
+  fallbacks), plus end-to-end checks that an unconfigured deployment
+  ignores the header on the login and `/translate` limiters. Those
+  end-to-end tests can't reproduce the *original* bypass, because
+  uvicorn's `ProxyHeadersMiddleware` is installed by the server rather
+  than by `app.main:app`, so `TestClient` never runs it — they would have
+  passed before the fix too. The flag is therefore guarded where it
+  actually lives: a deployment-contract test that fails if any
+  `--forwarded-allow-ips` returns to the Dockerfile's `CMD`, and another
+  that fails if `DEPLOYMENT.md` stops documenting the setting.
+
 ## [0.1.3] — PWA support & content expansion
 
 Two roadmap items, and a quiet full circle: the Turkish course written
