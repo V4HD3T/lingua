@@ -16,9 +16,19 @@ class UserRead(BaseModel):
     username: str
     email: str
     native_language: str
+    timezone: str = "UTC"
     daily_review_goal: int
     is_verified: bool
     is_admin: bool = False
+
+
+class TimezoneUpdate(BaseModel):
+    """An IANA zone name, e.g. "Europe/Istanbul" (v0.1.9). The frontend
+    reports what the browser says; the endpoint validates it against the
+    tz database rather than trusting it, since it's client-supplied and
+    ends up deciding which day a learner's activity counts toward."""
+
+    timezone: str = Field(min_length=1, max_length=64)
 
 
 class Token(BaseModel):

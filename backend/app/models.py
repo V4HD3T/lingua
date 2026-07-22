@@ -10,6 +10,12 @@ class User(SQLModel, table=True):
     email: str = Field(index=True, unique=True)
     hashed_password: str
     native_language: str = "en"
+    # IANA zone name (v0.1.9). Decides where this learner's day starts and
+    # ends, which is what streaks, "reviews today", and review scheduling
+    # are all counted against -- see app/services/user_time.py. "UTC" is
+    # the pre-v0.1.9 behaviour, kept as the default so a user who never
+    # reports a zone is treated exactly as before rather than guessed at.
+    timezone: str = "UTC"
     daily_review_goal: int = 10
     is_verified: bool = False
     # Admin flag is never settable through the public API (UserCreate has no

@@ -3,6 +3,9 @@ export interface User {
   username: string;
   email: string;
   native_language: string;
+  /** IANA zone deciding where this learner's day starts -- streaks,
+   * "reviews today" and review scheduling are all counted against it. */
+  timezone: string;
   daily_review_goal: number;
   is_verified: boolean;
   is_admin: boolean;

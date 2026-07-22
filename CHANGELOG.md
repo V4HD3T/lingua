@@ -11,6 +11,70 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.9] — Whose day is it
+
+A finding the v0.1.3 review filed as low severity and got wrong. It was
+promoted after it broke the test suite on a developer machine — which is
+also the story of why it survived this long.
+
+### Fixed
+
+- **Streaks, daily goals and review scheduling counted days in UTC.**
+  Every timestamp this app stores is UTC, and that was never the problem;
+  storing local times would be the actual mistake. The problem was that
+  the app also *asked what day it is* in UTC. A day is not a physical
+  quantity — it starts and ends where the person is.
+
+  East of UTC the day rolled over early: in UTC+3 a session at 01:00
+  local was credited to yesterday, and studying at 01:00 and again at
+  23:00 the same local day counted as **two** days, inflating a streak
+  nobody earned. West of UTC it is worse, because the error runs the
+  other way: in UTC-5 the day rolled at 19:00 local, so an evening review
+  was credited to *tomorrow* and the review queue's "due today" was
+  compared against a date the learner had not reached yet. For a
+  language-learning app whose central motivational mechanic is the
+  streak, this is not cosmetic.
+
+  Users now carry an IANA `timezone` (migration `0004`, default `UTC` —
+  exactly the old behaviour, so nobody's streak shifts underneath them on
+  upgrade). `app/services/user_time.py` converts at the point of the
+  *question* rather than the point of storage: `local_date` maps a stored
+  UTC instant to the day it fell on for that learner, `today_in` asks
+  what day it currently is for them. Streaks, activity dates, achievement
+  criteria, "reviews today", the review queue and next-review scheduling
+  all go through it. `last_reviewed_at` stays a UTC instant — that's a
+  point in time, not a day.
+
+  The frontend reports the browser's zone rather than asking for it: a
+  settings field nobody fills in would leave most accounts on the wrong
+  calendar anyway. It's sent only when it differs from what the server
+  holds, and a failure to send it never blocks sign-in — being on the
+  wrong calendar beats not getting in. The endpoint validates the name
+  against the tz database instead of storing it as given, since an
+  unrecognised zone would silently fall back to UTC on every read and
+  leave the learner with a setting that looks saved and does nothing.
+
+  `compute_streaks` now takes `today` as an argument instead of reading
+  the clock. That makes it total — same inputs, same answer — which
+  matters because of how this bug hid.
+
+- **Why it hid, and why the tests were complicit.** The streak unit tests
+  built their fixtures from `date.today()` — the **local** date — while
+  `compute_streaks` read the **UTC** one. They were therefore asserting
+  that local and UTC are the same day. That holds on a GitHub runner,
+  which is UTC, so CI was green for the entire life of the bug. It failed
+  the moment the suite ran east of UTC after local midnight. A test that
+  shares the bug under test cannot catch it; those fixtures are now a
+  fixed date.
+
+### Added
+
+- `tzdata` as a backend dependency. `zoneinfo` is stdlib but needs a tz
+  database, and Windows ships none — without it this code works in the
+  Linux container and raises on a developer's machine. Pinned rather than
+  floating, because a tz release can move a zone's rules and that decides
+  which day a learner's streak counts toward.
+
 ## [0.1.8] — Refresh tokens and the second browser tab
 
 Fifth finding from the v0.1.3 security review, and the first that was

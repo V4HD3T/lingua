@@ -16,8 +16,9 @@ from dataclasses import dataclass
 
 from sqlmodel import Session, select
 
-from app.models import Achievement, QuizAttempt, TranslationHistory, VocabularyProgress
+from app.models import Achievement, QuizAttempt, TranslationHistory, User, VocabularyProgress
 from app.services.streaks import compute_streaks, get_activity_dates
+from app.services.user_time import resolve_zone, today_in
 
 
 @dataclass
@@ -41,7 +42,8 @@ ACHIEVEMENT_CATALOGUE: list[AchievementDefinition] = [
 _CATALOGUE_BY_CODE = {a.code: a for a in ACHIEVEMENT_CATALOGUE}
 
 
-def _earned_codes_now(user_id: int, session: Session) -> set[str]:
+def _earned_codes_now(user: User, session: Session) -> set[str]:
+    user_id = user.id
     translation_count = len(
         session.exec(
             select(TranslationHistory.id).where(TranslationHistory.user_id == user_id)
@@ -55,7 +57,11 @@ def _earned_codes_now(user_id: int, session: Session) -> set[str]:
             select(VocabularyProgress.id).where(VocabularyProgress.user_id == user_id)
         ).all()
     )
-    current_streak, _ = compute_streaks(get_activity_dates(user_id, session))
+    # Streak badges are counted against the learner's own day, the same as
+    # the streak they see on their progress page (v0.1.9) -- awarding them
+    # on a different calendar than the one displayed would be its own bug.
+    zone = resolve_zone(user.timezone)
+    current_streak, _ = compute_streaks(get_activity_dates(user_id, session, zone), today_in(zone))
 
     earned = set()
     if translation_count >= 1:
@@ -78,17 +84,22 @@ def _earned_codes_now(user_id: int, session: Session) -> set[str]:
 
 
 def check_and_award(
-    user_id: int, session: Session
+    user: User, session: Session
 ) -> list[tuple[Achievement, AchievementDefinition]]:
     """Checks every badge's criteria against the user's current activity
     and awards any newly-met ones. Returns just the newly-awarded badges,
-    paired with their real earned_at timestamp (empty list if nothing new)."""
+    paired with their real earned_at timestamp (empty list if nothing new).
+
+    Takes the User rather than an id as of v0.1.9: the streak badges need
+    to know which timezone's calendar to count days on.
+    """
+    user_id = user.id
     already_earned = {
         a.code
         for a in session.exec(select(Achievement).where(Achievement.user_id == user_id)).all()
     }
 
-    newly_earned_codes = _earned_codes_now(user_id, session) - already_earned
+    newly_earned_codes = _earned_codes_now(user, session) - already_earned
     if not newly_earned_codes:
         return []
 

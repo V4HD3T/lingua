@@ -24,6 +24,28 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+/**
+ * Tells the backend where the learner is, so their day starts and ends
+ * where they do (v0.1.9). Streaks, "reviews today" and review scheduling
+ * are all counted against it; before this the server counted in UTC, and
+ * a session at 01:00 in UTC+3 landed on the previous day.
+ *
+ * Reported rather than asked for: the browser already knows, and a
+ * settings field nobody fills in would leave most accounts on the wrong
+ * calendar. Sent only when it actually differs from what the server has,
+ * so the ordinary page load costs no extra request -- and never allowed to
+ * break sign-in, since being on the wrong calendar beats not getting in.
+ */
+async function reportTimezone(user: User): Promise<User> {
+  const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (!browserZone || browserZone === user.timezone) return user;
+  try {
+    return await authApi.updateTimezone(browserZone);
+  } catch {
+    return user;
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -36,6 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     authApi
       .fetchCurrentUser()
+      .then(reportTimezone)
       .then(setUser)
       .catch((err) => {
         // Only discard the session when the backend actually rejected it.
@@ -53,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { access_token, refresh_token } = await authApi.login(username, password);
     setTokens(access_token, refresh_token);
     const me = await authApi.fetchCurrentUser();
-    setUser(me);
+    setUser(await reportTimezone(me));
   }
 
   async function register(

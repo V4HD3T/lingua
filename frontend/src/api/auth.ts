@@ -48,6 +48,14 @@ export function updateDailyGoal(dailyGoal: number): Promise<User> {
   });
 }
 
+export function updateTimezone(timezone: string): Promise<User> {
+  return apiRequest<User>("/auth/me/timezone", {
+    method: "PATCH",
+    body: { timezone },
+    auth: true,
+  });
+}
+
 export function requestPasswordReset(email: string): Promise<{ message: string }> {
   return apiRequest<{ message: string }>("/auth/request-password-reset", {
     method: "POST",

@@ -17,6 +17,7 @@ from app.schemas import (
     PasswordResetConfirm,
     PasswordResetRequest,
     RefreshRequest,
+    TimezoneUpdate,
     Token,
     UserCreate,
     UserRead,
@@ -34,6 +35,7 @@ from app.services.rate_limiter import (
 )
 from app.services.security_logging import log_event
 from app.services.tokens import generate_token, hash_token
+from app.services.user_time import is_valid_timezone
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -426,6 +428,31 @@ def reset_password(payload: PasswordResetConfirm, session: Session = Depends(get
 
 @router.get("/me", response_model=UserRead)
 def read_current_user(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+@router.patch("/me/timezone", response_model=UserRead)
+def update_timezone(
+    payload: TimezoneUpdate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Records where the learner is, so streaks, "reviews today" and review
+    scheduling turn over when *their* day does (v0.1.9). The frontend
+    reports the browser's zone automatically -- see AuthContext.
+
+    Validated against the tz database rather than stored as given: an
+    unrecognised name would silently fall back to UTC on every read (see
+    resolve_zone), leaving the learner with a setting that looks saved and
+    does nothing.
+    """
+    if not is_valid_timezone(payload.timezone):
+        raise HTTPException(status_code=400, detail="Unknown timezone")
+
+    current_user.timezone = payload.timezone
+    session.add(current_user)
+    session.commit()
+    session.refresh(current_user)
     return current_user
 
 

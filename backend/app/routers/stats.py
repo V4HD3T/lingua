@@ -3,7 +3,7 @@ Returns the user's progress summary: daily streak, per-course completion
 percentage, daily goal progress, and overall quiz/translation statistics.
 """
 
-from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
@@ -13,6 +13,7 @@ from app.models import Course, Lesson, Quiz, QuizAttempt, TranslationHistory, Us
 from app.routers.auth import get_current_user
 from app.schemas import CourseProgress, UserStats
 from app.services.streaks import compute_streaks, get_activity_dates
+from app.services.user_time import local_date, resolve_zone, today_in
 
 router = APIRouter(tags=["stats"])
 
@@ -50,14 +51,17 @@ def _compute_course_progress(user_id: int, course: Course, session: Session) -> 
     )
 
 
-def _reviews_done_today(user_id: int, session: Session) -> int:
-    today = datetime.now(timezone.utc).date()
+def _reviews_done_today(user_id: int, session: Session, zone: ZoneInfo) -> int:
+    """Counted against the learner's own day (v0.1.9) -- this is the number
+    shown against their daily goal, so it has to turn over when their day
+    does, not when UTC's does."""
+    today = today_in(zone)
     reviewed = session.exec(
         select(VocabularyProgress.last_reviewed_at).where(
             VocabularyProgress.user_id == user_id
         )
     ).all()
-    return sum(1 for t in reviewed if t is not None and t.date() == today)
+    return sum(1 for t in reviewed if t is not None and local_date(t, zone) == today)
 
 
 @router.get("/users/me/stats", response_model=UserStats)
@@ -65,8 +69,9 @@ def get_my_stats(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    activity_dates = get_activity_dates(current_user.id, session)
-    current_streak, longest_streak = compute_streaks(activity_dates)
+    zone = resolve_zone(current_user.timezone)
+    activity_dates = get_activity_dates(current_user.id, session, zone)
+    current_streak, longest_streak = compute_streaks(activity_dates, today_in(zone))
 
     total_translations = len(
         session.exec(
@@ -95,5 +100,5 @@ def get_my_stats(
         average_quiz_score=average_quiz_score,
         courses=course_progress,
         daily_goal=current_user.daily_review_goal,
-        reviews_today=_reviews_done_today(current_user.id, session),
+        reviews_today=_reviews_done_today(current_user.id, session, zone),
     )

@@ -201,7 +201,7 @@ def submit_quiz(
     )
     session.commit()
 
-    new_achievements = check_and_award(current_user.id, session)
+    new_achievements = check_and_award(current_user, session)
 
     return QuizResult(
         score=score,

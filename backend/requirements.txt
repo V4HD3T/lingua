@@ -8,6 +8,11 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.0.1  # passlib 1.7.4 is incompatible with bcrypt>=4.1's strict 72-byte check
 python-multipart==0.0.32
 email-validator
+# zoneinfo needs a tz database and Windows ships none, so the same code
+# would work in the Linux container and raise on a developer's machine.
+# Pinned rather than floating: a tz release can move a zone's rules, and
+# that decides which day a learner's streak counts toward.
+tzdata==2026.1
 langid==1.1.6
 pytest==9.1.1
 httpx==0.28.1

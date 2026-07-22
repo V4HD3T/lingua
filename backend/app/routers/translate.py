@@ -88,7 +88,7 @@ def translate_text(
         )
         session.add(record)
         session.commit()
-        new_achievements = check_and_award(current_user.id, session)
+        new_achievements = check_and_award(current_user, session)
 
     return TranslateResponse(
         source_text=payload.text,

@@ -10,6 +10,7 @@ from app.routers.auth import get_current_user
 from app.schemas import AchievementRead, ReviewQueueItem, ReviewResult, ReviewSubmission
 from app.services.achievements import check_and_award
 from app.services.spaced_repetition import DEFAULT_EASE_FACTOR, compute_next_schedule
+from app.services.user_time import resolve_zone, today_in
 
 router = APIRouter(tags=["review"])
 
@@ -22,7 +23,10 @@ def get_review_queue(
     """Words due for review today: brand-new words the learner hasn't seen
     yet, plus previously-seen words whose SM-2 schedule has come due.
     Ordered so new words come last, after anything already in progress."""
-    today = datetime.now(timezone.utc).date()
+    # The learner's day, not UTC's (v0.1.9). West of UTC this was the
+    # difference between a word being due and not: an evening review was
+    # compared against a date the learner hadn't reached yet.
+    today = today_in(resolve_zone(current_user.timezone))
 
     all_vocab = session.exec(select(VocabularyItem)).all()
     progress_by_item = {
@@ -98,14 +102,18 @@ def submit_review(
     progress.repetitions = outcome.repetitions
     progress.ease_factor = outcome.ease_factor
     progress.interval_days = outcome.interval_days
-    progress.next_review_date = now.date() + timedelta(days=outcome.interval_days)
+    # Scheduled from the learner's calendar day (v0.1.9). last_reviewed_at
+    # stays a UTC instant -- that's a point in time, not a day.
+    progress.next_review_date = today_in(
+        resolve_zone(current_user.timezone)
+    ) + timedelta(days=outcome.interval_days)
     progress.last_reviewed_at = now
 
     session.add(progress)
     session.commit()
     session.refresh(progress)
 
-    new_achievements = check_and_award(current_user.id, session)
+    new_achievements = check_and_award(current_user, session)
 
     return ReviewResult(
         vocabulary_item_id=vocabulary_item_id,
