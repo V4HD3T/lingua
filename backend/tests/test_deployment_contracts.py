@@ -6,13 +6,18 @@ CORS allowlist that rejected the origin the E2E suite actually browses
 from, and a Docker image that omitted the content packs its own
 deployment guide told operators to import."""
 
+import re
+import subprocess
 from pathlib import Path
+
+import pytest
 
 from app.config import Settings
 from app.main import docs_urls
 from app.services.content_import import CONTENT_DIR, available_packs
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
+REPO_ROOT = BACKEND_DIR.parent
 
 
 # --- CORS allowlist ---------------------------------------------------------
@@ -104,6 +109,37 @@ def test_development_setups_switch_docs_back_on():
     compose = (BACKEND_DIR.parent / "docker-compose.yml").read_text(encoding="utf-8")
     assert "ENABLE_API_DOCS=true" in env_example
     assert "ENABLE_API_DOCS" in compose
+
+
+# --- nothing database-shaped is tracked (v0.1.13) ---------------------------
+
+
+def test_no_database_file_is_committed():
+    """A 100 KB SQLite file rode into the repository in v0.0.9 under the
+    name "app.db  ; placeholder -- env.py overrides this from
+    app.config.settings" -- a .env value whose inline `;` comment became
+    part of the value, and so part of the filename SQLite created.
+
+    `.gitignore` said `app.db`, which that name does not match. Checking
+    what git actually tracks is the only way to catch the next variant,
+    since the whole failure mode is that the name is unpredictable.
+    """
+    result = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        pytest.skip("not a git checkout")
+
+    offenders = [
+        path
+        for path in result.stdout.split("\0")
+        if path and re.search(r"\.(db|sqlite3?)(\W|$)", Path(path).name)
+    ]
+    assert not offenders, f"database files are tracked in git: {offenders}"
 
 
 # --- content packs reach the runtime ----------------------------------------

@@ -2,6 +2,19 @@ venv/
 .venv*/
 __pycache__/
 *.pyc
-app.db
 .env
 .pytest_cache/
+
+# Local databases. `app.db` alone wasn't enough: a .env value carrying an
+# inline `;` comment produced a file literally named
+# "app.db  ; placeholder -- env.py overrides this from app.config.settings",
+# which matched nothing here and got committed (see CHANGELOG v0.1.13).
+# Match by prefix as well as extension, since the whole problem is that
+# the name can be anything.
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+app.db*

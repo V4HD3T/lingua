@@ -11,6 +11,52 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.13] — A database that shouldn't have been here
+
+The last item from the v0.1.3 review, and the smallest — but the cause
+turned out to be more interesting than the file.
+
+### Removed
+
+- **A 100 KB SQLite database, committed in v0.0.9**, under the name
+  `app.db  ; placeholder -- env.py overrides this from app.config.settings`.
+  Verified before deleting: 15 tables, and exactly one row in the whole
+  file — `alembic_version = '0002'`, the migration stamp. Zero user rows.
+  So nothing was exposed; it was an empty schema taking up space with a
+  filename that breaks tooling which doesn't expect `;` in a path.
+
+### Fixed
+
+- **The cause, which was never in the repository.** Reproduced rather
+  than guessed at: `pydantic-settings` takes `.env` values literally to
+  the end of the line, and neither `;` nor `#` starts a comment after a
+  value. So a line like
+
+  ```
+  DATABASE_URL=sqlite:///./app.db  ; placeholder -- ...
+  ```
+
+  yields a `database_url` with the comment still attached, and SQLite
+  obligingly creates a file named after the whole string. The `.env` is
+  gitignored, so only its consequence ever became visible — the file's
+  name is the only place that text has ever existed in this project
+  (`git log -S` finds it in no file's contents).
+
+  `backend/.env.example` now warns about this next to `DATABASE_URL`. It
+  is worth knowing beyond this one file: the same trap applies to every
+  setting, and `SECRET_KEY=abc ; change me` would silently make the
+  comment part of the signing key.
+
+- **`.gitignore` said `app.db`**, which is precisely the name the stray
+  file did not have. Now matched by extension *and* by prefix, plus the
+  SQLite journal/WAL siblings — the failure mode is that the name is
+  unpredictable, so matching one spelling was never going to be enough.
+
+- **Added a guard that checks what git actually tracks**
+  (`test_no_database_file_is_committed`), since ignore rules only help
+  for files nobody force-adds. Confirmed to fail against a deliberately
+  tracked file with the same mangled shape.
+
 ## [0.1.12] — Email verification, decided rather than drifted
 
 The last finding from the v0.1.3 review, and the only one that was a
