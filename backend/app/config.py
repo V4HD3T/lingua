@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_name: str = "AI Translation and Language Learning Platform"
-    app_version: str = "0.1.7"
+    app_version: str = "0.1.8"
     database_url: str = "sqlite:///./app.db"
 
     secret_key: str = "change-this-for-development"
@@ -16,6 +16,27 @@ class Settings(BaseSettings):
     # token itself long-lived.
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 30
+
+    # How long a just-rotated refresh token keeps working (v0.1.8).
+    #
+    # Refresh tokens are single-use, and replaying one is treated as
+    # theft: it revokes every session the user has. But two browser tabs
+    # share one localStorage and refresh independently, so both would
+    # present the same token within milliseconds of each other and the
+    # second one would destroy a perfectly innocent session. The same
+    # happens whenever a response is lost in transit and the client
+    # retries.
+    #
+    # Inside this window, replaying a token that was revoked *by
+    # rotation* mints a sibling instead of raising the alarm. Tokens
+    # revoked by logout, logout-all, password reset, or reuse detection
+    # are never forgiven, whatever the window says.
+    #
+    # The trade-off, stated plainly: a thief who replays a stolen token
+    # within this many seconds of the legitimate client's rotation is
+    # not detected. Keep it just long enough to cover a tab race or a
+    # retry -- seconds, not minutes.
+    refresh_reuse_grace_seconds: int = 10
 
     # True: mock translation service that runs without downloading a model (default, for dev/testing)
     # False: real NLLB transformer model (requires internet + transformers/torch installed)

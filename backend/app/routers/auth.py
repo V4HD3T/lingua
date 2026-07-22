@@ -54,6 +54,23 @@ def _as_aware_utc(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
+def _is_benign_rotation_replay(stored: RefreshToken) -> bool:
+    """True when a revoked refresh token is being replayed so soon after
+    its own rotation that a racing client, not a thief, is the
+    overwhelmingly likely explanation (v0.1.8).
+
+    Both conditions are required, and the reason check is the important
+    one: without it the grace window would also forgive a token revoked
+    by logout, logout-all, or a password reset -- exactly the revocations
+    that have to bite immediately, since they are what someone reaches for
+    when they think their account is compromised.
+    """
+    if stored.revoked_reason != "rotated" or stored.revoked_at is None:
+        return False
+    age = datetime.now(timezone.utc) - _as_aware_utc(stored.revoked_at)
+    return age <= timedelta(seconds=settings.refresh_reuse_grace_seconds)
+
+
 def _issue_tokens(user: User, session: Session) -> Token:
     access_token = create_access_token(subject=str(user.id))
 
@@ -173,9 +190,25 @@ def refresh_access_token(payload: RefreshRequest, session: Session = Depends(get
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
     if stored.revoked_at is not None:
-        # A revoked token being presented again is a strong signal of theft/replay
-        # (the legitimate client would have moved on to its rotated replacement).
-        # Precautionary response: kill every active session for this user.
+        if _is_benign_rotation_replay(stored):
+            # Two tabs sharing one localStorage refresh independently, so
+            # both present the same token within milliseconds; a lost
+            # response makes a client retry with it too. Treating that as
+            # theft logged real users out of every session they had, and
+            # filled the audit trail with theft alerts for events that
+            # were nothing of the sort. Inside the grace window a rotated
+            # token mints a sibling instead -- still recorded, because a
+            # burst of these is worth being able to see.
+            user = session.get(User, stored.user_id)
+            if user is None:
+                raise HTTPException(status_code=401, detail="User not found")
+            log_event("refresh_token_replayed_within_grace", user_id=stored.user_id)
+            return _issue_tokens(user, session)
+
+        # Outside the window, or revoked by something other than rotation:
+        # a strong signal of theft/replay, since the legitimate client
+        # would have moved on to its replacement. Precautionary response:
+        # kill every active session for this user.
         log_event("refresh_token_reuse_detected", user_id=stored.user_id)
         active = session.exec(
             select(RefreshToken).where(
@@ -185,6 +218,7 @@ def refresh_access_token(payload: RefreshRequest, session: Session = Depends(get
         for token in active:
             if token.revoked_at is None:
                 token.revoked_at = datetime.now(timezone.utc)
+                token.revoked_reason = "reuse_detected"
                 session.add(token)
         session.commit()
         raise HTTPException(
@@ -199,7 +233,10 @@ def refresh_access_token(payload: RefreshRequest, session: Session = Depends(get
         raise HTTPException(status_code=401, detail="User not found")
 
     # Rotate: this refresh token is now spent, replaced by a fresh one.
+    # The reason is what lets a replay moments from now be recognised as a
+    # tab race rather than theft -- see _is_benign_rotation_replay.
     stored.revoked_at = datetime.now(timezone.utc)
+    stored.revoked_reason = "rotated"
     session.add(stored)
     session.commit()
 
@@ -212,6 +249,7 @@ def logout(payload: LogoutRequest, session: Session = Depends(get_session)):
     stored = session.exec(select(RefreshToken).where(RefreshToken.token_hash == token_hash)).first()
     if stored is not None and stored.revoked_at is None:
         stored.revoked_at = datetime.now(timezone.utc)
+        stored.revoked_reason = "logout"
         session.add(stored)
         session.commit()
         log_event("logout", user_id=stored.user_id)
@@ -282,6 +320,7 @@ def logout_all(
     for token in active:
         if token.revoked_at is None:
             token.revoked_at = now
+            token.revoked_reason = "logout_all"
             session.add(token)
             count += 1
     session.commit()
@@ -377,6 +416,7 @@ def reset_password(payload: PasswordResetConfirm, session: Session = Depends(get
     for token in active:
         if token.revoked_at is None:
             token.revoked_at = now
+            token.revoked_reason = "password_reset"
             session.add(token)
 
     session.commit()

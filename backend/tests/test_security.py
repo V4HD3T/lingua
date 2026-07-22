@@ -178,7 +178,7 @@ def test_refresh_with_garbage_token_fails(client):
     assert response.status_code == 401
 
 
-def test_refresh_rotates_token_old_one_stops_working(client):
+def test_refresh_rotates_token_old_one_stops_working(client, no_refresh_grace):
     tokens = _register_and_login(client, username="rotator", email="rotator@example.com")
     old_refresh = tokens["refresh_token"]
 
@@ -191,7 +191,7 @@ def test_refresh_rotates_token_old_one_stops_working(client):
     assert second_attempt.status_code == 401
 
 
-def test_reusing_revoked_refresh_token_kills_all_sessions(client):
+def test_reusing_revoked_refresh_token_kills_all_sessions(client, no_refresh_grace):
     tokens = _register_and_login(client, username="thief-target", email="thieftarget@example.com")
     old_refresh = tokens["refresh_token"]
 
@@ -205,6 +205,89 @@ def test_reusing_revoked_refresh_token_kills_all_sessions(client):
     # the legitimate, rotated token should now ALSO be dead as a precaution
     response = client.post("/auth/refresh", json={"refresh_token": new_refresh})
     assert response.status_code == 401
+
+
+# --- v0.1.8: the grace window for a just-rotated token ----------------------
+#
+# Both of the tests above replay a token milliseconds after rotating it,
+# which is now exactly what a browser with two tabs open does. They take
+# the `no_refresh_grace` fixture so they still assert what they were
+# written to assert -- that a replay OUTSIDE the window is treated as
+# theft. The tests below cover inside it.
+
+
+def test_two_tabs_refreshing_at_once_does_not_kill_the_session(client):
+    """The bug: two tabs share one localStorage, refresh independently,
+    and both present the same token. That was indistinguishable from
+    theft, so an ordinary second tab logged the user out everywhere."""
+    tokens = _register_and_login(client, username="twotabs", email="twotabs@example.com")
+    shared_refresh = tokens["refresh_token"]
+
+    tab_one = client.post("/auth/refresh", json={"refresh_token": shared_refresh})
+    tab_two = client.post("/auth/refresh", json={"refresh_token": shared_refresh})
+
+    assert tab_one.status_code == 200
+    assert tab_two.status_code == 200, "the second tab was treated as a token thief"
+
+    # Both tabs come away with a working session, and neither token was
+    # collateral damage from the other.
+    for issued in (tab_one.json(), tab_two.json()):
+        me = client.get(
+            "/auth/me", headers={"Authorization": f"Bearer {issued['access_token']}"}
+        )
+        assert me.status_code == 200
+        assert client.post(
+            "/auth/refresh", json={"refresh_token": issued["refresh_token"]}
+        ).status_code == 200
+
+
+def test_grace_does_not_apply_to_a_token_revoked_by_logout(client):
+    """Logout has to bite immediately. If the window forgave any revoked
+    token rather than specifically a rotated one, a stale tab could
+    resurrect a session the user had just deliberately ended."""
+    tokens = _register_and_login(client, username="loggedout", email="loggedout@example.com")
+    client.post("/auth/logout", json={"refresh_token": tokens["refresh_token"]})
+
+    replayed = client.post("/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
+    assert replayed.status_code == 401
+
+
+def test_grace_does_not_apply_after_a_password_reset(client):
+    """Same reasoning, and the case that matters most: a password reset is
+    what someone does when they believe they've been compromised."""
+    tokens = _register_and_login(client, username="resetter", email="resetter@example.com")
+    get_email_service().sent_emails.clear()
+    client.post("/auth/request-password-reset", json={"email": "resetter@example.com"})
+    token = re.search(r"token=([\w-]+)", get_email_service().sent_emails[0].body).group(1)
+    client.post("/auth/reset-password", json={"token": token, "new_password": "brand-new-pass1"})
+
+    replayed = client.post("/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
+    assert replayed.status_code == 401
+
+
+def test_grace_does_not_apply_after_logout_all(client):
+    tokens = _register_and_login(client, username="everywhere", email="everywhere@example.com")
+    client.post(
+        "/auth/logout-all", headers={"Authorization": f"Bearer {tokens['access_token']}"}
+    )
+
+    replayed = client.post("/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
+    assert replayed.status_code == 401
+
+
+def test_replay_after_the_grace_window_still_kills_every_session(client, no_refresh_grace):
+    """The property the window trades against, pinned explicitly: once the
+    window has passed, a replayed token is theft and takes the whole
+    session with it."""
+    tokens = _register_and_login(client, username="latethief", email="latethief@example.com")
+    rotated = client.post("/auth/refresh", json={"refresh_token": tokens["refresh_token"]}).json()
+
+    client.post("/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
+
+    assert (
+        client.post("/auth/refresh", json={"refresh_token": rotated["refresh_token"]}).status_code
+        == 401
+    )
 
 
 def test_logout_revokes_refresh_token(client):

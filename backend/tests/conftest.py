@@ -41,6 +41,20 @@ def _reset_mock_email_service():
     yield
 
 
+@pytest.fixture
+def no_refresh_grace(monkeypatch):
+    """Closes the v0.1.8 refresh grace window for tests that assert
+    replay-is-theft. Those tests replay a token milliseconds after
+    rotating it, which is now the signature of two browser tabs racing
+    rather than of a thief -- setting the window to zero puts every replay
+    outside it, so they go on asserting what they were written to
+    assert."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "refresh_reuse_grace_seconds", 0)
+    yield
+
+
 @pytest.fixture(name="session")
 def session_fixture():
     engine = create_engine(

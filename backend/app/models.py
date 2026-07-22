@@ -146,6 +146,13 @@ class RefreshToken(SQLModel, table=True):
     token_hash: str = Field(index=True, unique=True)
     expires_at: datetime
     revoked_at: Optional[datetime] = None
+    # Why this token was revoked (v0.1.8). Load-bearing, not diagnostic:
+    # /auth/refresh forgives a token replayed moments after it was
+    # "rotated" (two browser tabs racing), but must never forgive one
+    # revoked by "logout", "logout_all", "password_reset", or
+    # "reuse_detected" -- those have to take effect immediately. None on
+    # rows written before v0.1.8, which are all long expired.
+    revoked_reason: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

@@ -11,6 +11,64 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.8] — Refresh tokens and the second browser tab
+
+Fifth finding from the v0.1.3 security review, and the first that was
+hurting real users rather than only being exploitable. It's also the
+first to touch the frontend.
+
+### Fixed
+
+- **Opening a second tab logged you out of everything.** Refresh tokens
+  are single-use, and replaying one is treated as theft: every session
+  the user has is revoked. But `client.ts` deduped concurrent refreshes
+  in module state — per *tab* — while the tokens it guards live in
+  `localStorage`, which every tab of the origin shares. Two tabs each
+  deduped perfectly on their own and still sent the same token. One
+  rotated it; the other presented a token that had been revoked
+  microseconds earlier and was shown the door, along with every other
+  session. The same happened to any client that retried after a lost
+  response.
+
+  Worse than the logout: it fired `refresh_token_reuse_detected`, which
+  is the alarm for stolen credentials. Routine false positives on that
+  event teach whoever reads these logs to ignore them — and v0.1.7 had
+  just gone to some trouble to make that log trustworthy.
+
+  Fixed on both sides, because neither half is sufficient:
+
+  - **Frontend:** the refresh now runs inside a Web Lock
+    (`navigator.locks`), which is held across tabs of an origin rather
+    than within one. Whichever tab wins refreshes; the others wait, then
+    re-read `localStorage`, find the token already replaced, and never
+    make the call at all. Where Web Locks are missing (Safari before
+    15.4) this degrades to the previous per-tab behaviour.
+  - **Backend:** a token replayed within `REFRESH_REUSE_GRACE_SECONDS`
+    (default 10) of *its own rotation* mints a sibling instead of raising
+    the alarm. This is what covers the Safari fallback and lost-response
+    retries, which no amount of client coordination can prevent.
+
+  The grace window is gated on **why** the token was revoked, via a new
+  `refreshtoken.revoked_reason` column (migration `0003`). Only
+  `"rotated"` is forgiven. Logout, logout-all, password reset and reuse
+  detection are never forgiven, whatever the window says — those are
+  precisely what someone reaches for when they believe they've been
+  compromised, and a stale tab must not be able to resurrect a session
+  they just ended. There are three tests holding that line specifically.
+
+  The trade-off, stated rather than buried: a thief who replays a stolen
+  token within ten seconds of the legitimate client's rotation is not
+  detected. That is the standard leeway for this problem, and it buys out
+  a false-positive rate high enough that the detector was doing more harm
+  than good.
+
+  Two existing tests changed here, both of which replayed a token
+  milliseconds after rotating it — which is now the signature of a second
+  tab, not of a thief. They take a `no_refresh_grace` fixture so they go
+  on asserting exactly what they were written to assert: that a replay
+  *outside* the window is treated as theft and takes the whole session
+  with it.
+
 ## [0.1.7] — Security log integrity
 
 Fourth finding from the v0.1.3 security review, and the first that isn't
