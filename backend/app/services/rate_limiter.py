@@ -170,6 +170,12 @@ login_rate_limiter = RateLimiter(max_attempts=5, window_seconds=60)
 register_rate_limiter = RateLimiter(max_attempts=5, window_seconds=60)
 password_reset_rate_limiter = RateLimiter(max_attempts=3, window_seconds=300)
 
+# Resending a verification email (v0.1.12). Keyed by user id rather than
+# address: the endpoint requires a session, so the account is the thing
+# worth bounding, and keying by address would let one person behind a
+# shared connection use up everyone else's budget.
+verification_resend_rate_limiter = RateLimiter(max_attempts=3, window_seconds=900)
+
 # Failed logins from one address, across every username it tries (v0.1.6).
 #
 # This exists because of what fixing the reset bypass opened up. Keying

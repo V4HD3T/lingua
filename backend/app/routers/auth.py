@@ -32,6 +32,7 @@ from app.services.rate_limiter import (
     login_rate_limiter,
     password_reset_rate_limiter,
     register_rate_limiter,
+    verification_resend_rate_limiter,
 )
 from app.services.security_logging import log_event
 from app.services.tokens import generate_token, hash_token
@@ -367,6 +368,60 @@ def verify_email(payload: EmailVerificationConfirm, session: Session = Depends(g
 
     log_event("email_verified", user_id=user.id)
     return MessageResponse(message="Email verified")
+
+
+@router.post("/resend-verification", response_model=MessageResponse)
+def resend_verification(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+    email_service: EmailService = Depends(get_email_service),
+):
+    """Sends a fresh verification link to the address already on file
+    (v0.1.12).
+
+    Added because the app now *shows* people whether their email is
+    verified, and the original link expires after 24 hours. Telling
+    someone their address is unverified while offering no way to fix it
+    is worse than not telling them: the registration email is the only
+    link that ever existed, and a day later it is gone.
+
+    Takes no email address parameter on purpose. The destination is the
+    one on the authenticated account, so this can't be used to send mail
+    to an address of the caller's choosing.
+    """
+    if current_user.is_verified:
+        return MessageResponse(message="Your email is already verified.")
+
+    _rate_limit(
+        verification_resend_rate_limiter, str(current_user.id), "resend_verification"
+    )
+
+    # Retire any link still outstanding, so exactly one works at a time.
+    outstanding = session.exec(
+        select(AuthToken).where(
+            AuthToken.user_id == current_user.id,
+            AuthToken.purpose == "email_verification",
+            AuthToken.used_at.is_(None),
+        )
+    ).all()
+    now = datetime.now(timezone.utc)
+    for token in outstanding:
+        token.used_at = now
+        session.add(token)
+    session.commit()
+
+    raw_token = _create_auth_token(
+        current_user.id, "email_verification", timedelta(hours=VERIFICATION_TOKEN_HOURS), session
+    )
+    verify_link = f"{settings.frontend_base_url}/verify-email?token={raw_token}"
+    email_service.send(
+        to=current_user.email,
+        subject="Verify your Lingua account",
+        body=f"Verify your email: {verify_link}",
+    )
+
+    log_event("verification_email_resent", user_id=current_user.id)
+    return MessageResponse(message="Verification email sent.")
 
 
 @router.post("/request-password-reset", response_model=MessageResponse)

@@ -11,6 +11,50 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.12] — Email verification, decided rather than drifted
+
+The last finding from the v0.1.3 review, and the only one that was a
+product question rather than a defect. `is_verified` was written by
+`/auth/verify-email` and read by nothing: the whole flow was decorative.
+
+### Decided
+
+- **Verification stays informational; nothing is gated on it.** The
+  reflex is to add a gate, so the reasoning is worth stating. What
+  verification protects against is someone registering with an address
+  they don't control — and this app has no messaging, sharing, public
+  profile or payments, so such an account can't reach or impersonate
+  anyone. The one thing the address governs is password reset, which cuts
+  the *other* way: the real owner of a mistyped address can use reset to
+  take the account back.
+
+  Against that, enforcement would have cost real users: every existing
+  account has `is_verified = false`, so gating login locks out the whole
+  user base at once; the verification link expires after 24 hours and
+  there was no way to get another; and gating a subset of endpoints means
+  drawing an arbitrary line and explaining it mid-session.
+
+  Recorded in SECURITY.md as a decision with its reasoning, and pinned by
+  `test_unverified_account_can_use_the_whole_app` — if a gate is added
+  later, that test fails and the choice gets made deliberately instead of
+  by drift.
+
+### Fixed
+
+- **Two things were wrong regardless of that decision.** The app sent a
+  verification email at registration and then never mentioned it again,
+  so nobody could tell whether they'd acted on it or whether it mattered.
+  The progress page now shows where you stand, worded to match the
+  decision — it says plainly that everything works without it.
+
+- **And that status is actionable.** `POST /auth/resend-verification`
+  (authenticated, rate limited per account, retires any outstanding link)
+  exists because showing someone an unverified status with no recourse
+  would be worse than the silence it replaced: the registration link is
+  the only one that ever existed and it expires in a day. The endpoint
+  takes no address parameter — the destination is the one on the
+  authenticated account, so it can't be pointed anywhere.
+
 ## [0.1.11] — Saying true things
 
 Four findings that share a shape: the code and the documents describing

@@ -13,6 +13,7 @@ from app.services.rate_limiter import (
     password_reset_rate_limiter,
     register_rate_limiter,
     translate_rate_limiter,
+    verification_resend_rate_limiter,
 )
 
 
@@ -30,6 +31,7 @@ def _reset_rate_limiters():
     password_reset_rate_limiter.clear_all()
     api_rate_limiter.clear_all()
     translate_rate_limiter.clear_all()
+    verification_resend_rate_limiter.clear_all()
     yield
 
 

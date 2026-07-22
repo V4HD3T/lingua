@@ -48,6 +48,13 @@ export function updateDailyGoal(dailyGoal: number): Promise<User> {
   });
 }
 
+export function resendVerification(): Promise<{ message: string }> {
+  return apiRequest<{ message: string }>("/auth/resend-verification", {
+    method: "POST",
+    auth: true,
+  });
+}
+
 export function updateTimezone(timezone: string): Promise<User> {
   return apiRequest<User>("/auth/me/timezone", {
     method: "PATCH",
