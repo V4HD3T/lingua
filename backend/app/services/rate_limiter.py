@@ -14,6 +14,17 @@ Hand-rolled rather than pulling in a rate-limiting library: the mechanism
 is simple enough to implement correctly in a few lines, and understanding
 exactly how your own brute-force protection works matters more here than
 saving a dozen lines of code.
+
+Memory (v0.1.5): attempt history is swept once per window, so what the
+table holds is bounded by the number of *distinct keys seen within one
+window* rather than by every key seen since the process started. That
+bound is still a function of incoming traffic, not a constant -- a burst
+of requests from many addresses inside a single window is held until that
+window turns over. Bounding it harder would mean evicting live entries,
+which is the one thing a rate limiter must not do (see
+RateLimiter._sweep). Making it genuinely constant, and shared across
+instances, is the same Redis-backed answer as the multi-instance gap
+above.
 """
 
 import ipaddress
@@ -34,6 +45,8 @@ class RateLimiter:
         self.window = timedelta(seconds=window_seconds)
         self._attempts: dict[str, list[datetime]] = defaultdict(list)
         self._lock = Lock()
+        # First sweep is a window away: there is nothing to collect yet.
+        self._next_sweep = datetime.now(timezone.utc) + self.window
 
     def check(self, key: str) -> bool:
         """Returns True if this request is allowed (and records it as an
@@ -43,6 +56,9 @@ class RateLimiter:
         now = datetime.now(timezone.utc)
         cutoff = now - self.window
         with self._lock:
+            if now >= self._next_sweep:
+                self._sweep(cutoff)
+                self._next_sweep = now + self.window
             recent = [t for t in self._attempts[key] if t > cutoff]
             if len(recent) >= self.max_attempts:
                 self._attempts[key] = recent
@@ -50,6 +66,53 @@ class RateLimiter:
             recent.append(now)
             self._attempts[key] = recent
             return True
+
+    def _sweep(self, cutoff: datetime) -> None:
+        """Drops keys whose attempts have all aged out of the window.
+        Caller must hold the lock (v0.1.5).
+
+        Without this, `_attempts` only ever grew: `check()` prunes the
+        timestamps of the key it was asked about, but every key ever seen
+        kept its dict entry forever -- including entries pruned down to an
+        empty list. One process-lifetime of traffic therefore leaked one
+        entry per distinct client address, and an attacker rotating
+        addresses (trivial from any IPv6 allocation, which hands out more
+        than there are addresses in all of IPv4) could grow it until the
+        process died.
+
+        This is safe to do *because* it only removes keys that are already
+        spent: a key survives here only if it still has an attempt inside
+        the window. Re-checking a swept key computes `recent = []` and
+        allows the request -- exactly what it would have computed from the
+        expired timestamps had they been left in place. So the sweep
+        changes memory, never a limiting decision, and in particular can
+        never hand a currently-throttled caller a fresh budget.
+
+        That last property is why this isn't a size cap. An LRU-style
+        "keep the newest N keys" bound would evict *live* entries under
+        pressure, which is precisely the state an attacker generating keys
+        is in -- they could push their own throttled entry out and start
+        over. Collecting only expired entries has no such failure mode.
+
+        Cost: one pass over the table, holding the lock, at most once per
+        window. Checking `times[-1]` is O(1) per key because attempts are
+        appended in order, so the newest is last -- a sweep is O(keys),
+        not O(attempts). A table bloated to a million keys is a single
+        pause of some tens of milliseconds, after which it is small again.
+        """
+        stale = [
+            key for key, times in self._attempts.items() if not times or times[-1] <= cutoff
+        ]
+        for key in stale:
+            del self._attempts[key]
+
+    @property
+    def tracked_keys(self) -> int:
+        """How many keys currently hold attempt history. Exposed for tests
+        and for anyone wanting to sanity-check memory use in a running
+        process."""
+        with self._lock:
+            return len(self._attempts)
 
     def reset(self, key: str) -> None:
         """Clears attempts for `key` -- e.g. call this on a successful

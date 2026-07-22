@@ -11,10 +11,56 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
-## [0.1.4] — Security review follow-up (in progress)
+## [0.1.5] — Rate limiter memory
 
-A fresh adversarial read of the codebase at v0.1.3, working through the
-findings one at a time. This section grows as each is fixed.
+Second finding from the v0.1.3 security review, and the other half of the
+attack v0.1.4 closed: that one was about *which* address the limiter
+keys on, this one about what keying on an address costs.
+
+### Fixed
+
+- **The rate limiter's attempt table only ever grew.** `check()` pruned
+  expired timestamps for the key it was asked about, but nothing ever
+  removed a key from `_attempts` — so every distinct client address seen
+  since process start kept an entry for the life of the process,
+  including entries already pruned down to an empty list. Steady traffic
+  leaked slowly; a caller rotating addresses grew it deliberately, and
+  rotating addresses is cheap from any IPv6 allocation (a single /64
+  hands out more addresses than all of IPv4). Nothing in the limiter
+  could push back, because each request arrived under a *new* key and so
+  never met a budget.
+
+  `check()` now sweeps the table at most once per window, dropping keys
+  whose attempts have all aged out. Memory is therefore bounded by the
+  distinct keys seen **within one window** instead of by every key seen
+  ever.
+
+  The sweep collects only spent keys, and that restraint is the design,
+  not an implementation detail: a key survives unless every one of its
+  attempts has expired, so re-checking a swept key computes exactly what
+  it would have computed from the expired timestamps left in place. The
+  sweep changes memory, never a limiting decision — in particular it can
+  never hand a throttled caller a fresh budget. That rules out the
+  obvious alternative, an LRU/size cap: capping evicts *live* entries
+  under pressure, which is precisely the state an attacker generating
+  keys is in, so they could push their own throttled entry out and start
+  over. Collecting only expired entries has no such failure mode.
+
+  Honest about the remaining bound: it's a function of traffic, not a
+  constant. A burst from many addresses inside one window is still held
+  until that window turns over. Making it constant, and shared across
+  instances, is the same Redis-backed answer already noted for the
+  limiter's multi-instance gap.
+
+  Ten tests, five of which fail against the pre-fix code (the leak
+  itself, plus the end-to-end shrink). The other five are guards on the
+  safety properties rather than reproductions — they pass either way
+  today, and exist so that a future "let's just cap the table" change
+  fails loudly.
+
+## [0.1.4] — Client address resolution behind proxies
+
+First finding from a fresh adversarial read of the codebase at v0.1.3.
 
 ### Fixed
 
