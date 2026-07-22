@@ -19,7 +19,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
-from app.services.rate_limiter import RateLimiter
+from app.services.rate_limiter import RateLimiter, login_key
 
 
 def _force_sweep_due(limiter: RateLimiter) -> None:
@@ -193,3 +193,47 @@ def test_table_shrinks_on_its_own_once_a_window_passes():
     limiter.check("the-next-request-that-happens-along")
 
     assert limiter.tracked_keys == 1
+
+
+# --- testing a budget without spending from it (v0.1.6) ----------------------
+
+
+def test_is_exhausted_does_not_consume_budget():
+    limiter = RateLimiter(max_attempts=2, window_seconds=60)
+    for _ in range(10):
+        assert limiter.is_exhausted("quiet") is False
+    # All ten questions asked, none of them charged.
+    assert limiter.check("quiet") is True
+    assert limiter.check("quiet") is True
+    assert limiter.check("quiet") is False
+
+
+def test_is_exhausted_does_not_create_a_table_entry():
+    limiter = RateLimiter(max_attempts=2, window_seconds=60)
+    limiter.is_exhausted("never-seen")
+    assert limiter.tracked_keys == 0
+
+
+def test_record_consumes_budget_without_reporting():
+    limiter = RateLimiter(max_attempts=2, window_seconds=60)
+    limiter.record("noisy")
+    limiter.record("noisy")
+    assert limiter.is_exhausted("noisy") is True
+
+
+# --- login keys --------------------------------------------------------------
+
+
+def test_login_key_folds_username_case():
+    assert login_key("10.0.0.1", "Casey") == login_key("10.0.0.1", "cAsEy")
+
+
+def test_login_key_separates_by_address_and_username():
+    assert login_key("10.0.0.1", "casey") != login_key("10.0.0.2", "casey")
+    assert login_key("10.0.0.1", "casey") != login_key("10.0.0.1", "dana")
+
+
+def test_login_key_cannot_be_confused_across_pairs():
+    """A printable separator like ":" would render these two pairs as the
+    same string, letting one pair spend another's budget."""
+    assert login_key("10.0.0.1", "2:carol") != login_key("10.0.0.1:2", "carol")

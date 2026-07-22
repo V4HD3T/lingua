@@ -11,6 +11,63 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.6] — Login brute-force budgets
+
+Third finding from the v0.1.3 security review. The previous two were
+about the rate limiter's plumbing — which address it keys on, what
+keying costs. This one is about the login budget itself being spendable
+by the wrong person.
+
+### Fixed
+
+- **A successful login cleared the whole address's failed-login budget.**
+  Login was limited per address, and `login_rate_limiter.reset(ip)` on
+  success wiped that address's counter — including failures recorded
+  against completely unrelated accounts. Anyone holding an account of
+  their own could therefore spend four guesses on a victim, log in as
+  themselves to zero the counter, and repeat indefinitely. The intended
+  5/min became roughly the global backstop's 120/min, a ~20x
+  amplification, and the reset was reachable by design rather than by
+  any trick.
+
+  The budget is now keyed per **(address, username)** — logging in as
+  yourself clears only your own pair. The username is case-folded when
+  building the key, so capitalisation can't mint fresh budgets: today's
+  lookup is case-sensitive, but `=` on text is case-*insensitive* under
+  some collations (MySQL's default, Postgres with citext) and
+  `DEPLOYMENT.md` already points at Postgres. The two parts are joined
+  with NUL, because login takes the username straight off an OAuth2 form
+  with no validation and an ordinary separator would let one pair's key
+  collide with another's.
+
+- **Added: a per-address failed-login budget** (`LOGIN_IP_FAILURE_LIMIT_PER_MINUTE`,
+  default 20/min). This is not a separate improvement — it is the other
+  half of the fix above, and shipping the re-keying without it would
+  have traded one hole for another. Per-pair keying on its own means one
+  address gets 5 guesses *per username*, i.e. no total cap at all on
+  password spraying (one common password against thousands of accounts),
+  with only the 120/min global backstop underneath. The two budgets
+  answer different attacks: the pair budget bounds how hard one account
+  can be hammered, the address budget bounds how much guessing one
+  address can do at all.
+
+  Only failures are charged to it, and it is never reset. That is what
+  makes it safe to set well below the global backstop: people logging in
+  successfully never touch it, so a shared address — office NAT, mobile
+  CGNAT, a household — doesn't accumulate a budget just by being busy.
+
+  Supporting this needed `RateLimiter.is_exhausted()` (test a budget
+  without spending from it) and `.record()` (spend without testing),
+  plus `enforce_rate_limit(..., record=False)` so the 429 response shape
+  still comes from one place.
+
+  Ten tests. The end-to-end replay of the bypass fails against the
+  pre-fix code (`assert 401 == 429` — the sixth guess sailed through
+  because the attacker's own login had restored the budget). The
+  spraying and never-charged-for-success tests cover the new budget; the
+  case-folding test is a guard rather than a reproduction, since
+  address-only keying passed it vacuously.
+
 ## [0.1.5] — Rate limiter memory
 
 Second finding from the v0.1.3 security review, and the other half of the

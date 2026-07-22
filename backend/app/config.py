@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_name: str = "AI Translation and Language Learning Platform"
-    app_version: str = "0.1.5"
+    app_version: str = "0.1.6"
     database_url: str = "sqlite:///./app.db"
 
     secret_key: str = "change-this-for-development"
@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     # Defaults unchanged from v0.0.8.
     api_rate_limit_per_minute: int = 120
     translate_rate_limit_per_minute: int = 30
+
+    # Failed logins allowed from one address per minute, across every
+    # username it tries (v0.1.6). Successful logins are never charged, so
+    # this only ever counts guessing -- which is why it can sit well below
+    # the 120/min global backstop without troubling a shared address like
+    # an office NAT. Raise it only if a genuinely busy shared address
+    # produces enough *failed* logins to trip it.
+    login_ip_failure_limit_per_minute: int = 20
 
     # How many trusted reverse proxies sit in front of this app (v0.1.4).
     #

@@ -48,6 +48,98 @@ def test_successful_login_resets_rate_limit(client):
     assert again.status_code == 200
 
 
+def test_logging_in_as_yourself_does_not_clear_another_accounts_failures(client):
+    """The v0.1.6 bypass, end to end.
+
+    Login used to be limited per address, and a success reset that whole
+    address. So an attacker holding any account of their own could spend
+    guesses on a victim, log in as themselves to zero the counter, and go
+    again -- turning 5/min into roughly the global backstop's 120/min.
+    """
+    client.post(
+        "/auth/register",
+        json={"username": "victim", "email": "victim@example.com", "password": "victim-password"},
+    )
+    client.post(
+        "/auth/register",
+        json={"username": "attacker", "email": "attacker@example.com", "password": "attacker-password"},
+    )
+
+    for _ in range(4):
+        guess = client.post("/auth/login", data={"username": "victim", "password": "wrong"})
+        assert guess.status_code == 401
+
+    # The attacker's own, entirely legitimate login.
+    own = client.post(
+        "/auth/login", data={"username": "attacker", "password": "attacker-password"}
+    )
+    assert own.status_code == 200
+
+    # The victim's budget must be exactly where it was left: one guess
+    # remaining, then throttled.
+    assert (
+        client.post("/auth/login", data={"username": "victim", "password": "wrong"}).status_code
+        == 401
+    )
+    blocked = client.post("/auth/login", data={"username": "victim", "password": "wrong"})
+    assert blocked.status_code == 429, "logging in as another account restored the victim's budget"
+
+
+def test_username_case_does_not_mint_a_fresh_budget(client):
+    # The pair key folds case, so capitalisation can't be used to open a
+    # second budget against the same account.
+    client.post(
+        "/auth/register",
+        json={"username": "casey", "email": "casey@example.com", "password": "casey-password"},
+    )
+    for variant in ("casey", "CASEY", "Casey", "cAsEy", "casEY"):
+        assert (
+            client.post("/auth/login", data={"username": variant, "password": "wrong"}).status_code
+            == 401
+        )
+
+    blocked = client.post("/auth/login", data={"username": "CaSeY", "password": "wrong"})
+    assert blocked.status_code == 429
+
+
+def test_spraying_many_usernames_from_one_address_is_capped(client, monkeypatch):
+    """Keying the budget per (address, username) is what fixes the reset
+    bypass -- but on its own it would hand one address 5 guesses per
+    username and no total cap at all. The address-wide failure budget is
+    the other half of that fix; each username below is distinct, so only
+    it can produce a 429."""
+    from app.services.rate_limiter import login_ip_rate_limiter
+
+    monkeypatch.setattr(login_ip_rate_limiter, "max_attempts", 6)
+    statuses = [
+        client.post(
+            "/auth/login", data={"username": f"sprayed{i}", "password": "one-common-password"}
+        ).status_code
+        for i in range(10)
+    ]
+    assert 429 in statuses, f"spraying was never throttled: {statuses}"
+
+
+def test_successful_logins_do_not_consume_the_address_failure_budget(client, monkeypatch):
+    """Only failures are charged, which is what makes the address budget
+    safe to set tight: a shared address (office NAT, mobile CGNAT) doesn't
+    accumulate one just by being busy."""
+    from app.services.rate_limiter import login_ip_rate_limiter
+
+    monkeypatch.setattr(login_ip_rate_limiter, "max_attempts", 3)
+    client.post(
+        "/auth/register",
+        json={"username": "busy", "email": "busy@example.com", "password": "busy-password1"},
+    )
+    for _ in range(10):
+        assert (
+            client.post(
+                "/auth/login", data={"username": "busy", "password": "busy-password1"}
+            ).status_code
+            == 200
+        )
+
+
 def test_register_rate_limited_after_too_many_attempts(client):
     for i in range(5):
         client.post(
