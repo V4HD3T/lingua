@@ -1,6 +1,6 @@
 # Lingua — AI Translation and Language Learning Platform
 
-**Version:** 0.1.3
+**Version:** 0.1.11
 
 A platform offering real-time translation and interactive language
 learning for multilingual users. Built as part of a university graduation
@@ -33,6 +33,14 @@ lives in [CHANGELOG.md](./CHANGELOG.md).
 | 0.1.1 | UX: dark mode (token-level, no-flash), general toast system, copy-to-clipboard, accessibility audit — incl. fixing five measured WCAG failures the light theme had shipped with. |
 | 0.1.2 | Test depth: first frontend unit tests (Vitest, 16), Playwright E2E journey in CI, Locust load testing with measured limiter verification, `TESTING.md`. |
 | 0.1.3 | PWA (installable, offline shell, maskable icons, opt-in updates) and content as importable JSON packs — Turkish A1 + Spanish A2, tripling the catalogue. |
+| 0.1.4 | Security review follow-up begins: client address resolved from `TRUSTED_PROXY_HOPS` instead of uvicorn's `--forwarded-allow-ips "*"`, which trusted the caller-written end of `X-Forwarded-For` and made every per-IP rate limit bypassable. |
+| 0.1.5 | Rate limiter memory: the attempt table is swept once per window, so it's bounded by keys seen *in a window* rather than every key seen since start-up. |
+| 0.1.6 | Login budgets keyed per (address, username) — a successful login no longer clears an unrelated account's failures — plus a per-address failed-login cap so re-keying doesn't open the door to password spraying. |
+| 0.1.7 | Security log integrity: field values are escaped, so a username containing a newline can no longer forge audit entries. |
+| 0.1.8 | Refresh tokens survive a second browser tab: cross-tab Web Lock on the client, and a grace window for a *just-rotated* token on the server (never for logout or password reset). |
+| 0.1.9 | Days are counted in each learner's timezone, not UTC — streaks, daily goals and review scheduling were rolling over at the wrong hour for everyone outside UTC. |
+| 0.1.10 | API docs (`/docs`, `/redoc`, `/openapi.json`) off by default, and actually rendering when on — CSP had been blanking the Swagger page since v0.0.8. |
+| 0.1.11 | Accuracy pass: bcrypt's silent 72-byte truncation fixed (`bcrypt_sha256`, migrating on login), `SECURITY.md` corrected where it described a fix that never existed and a role model that no longer matched, working `npm run lint`. |
 
 ## Quick start
 

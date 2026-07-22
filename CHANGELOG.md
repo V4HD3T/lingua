@@ -11,6 +11,68 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.11] — Saying true things
+
+Four findings that share a shape: the code and the documents describing
+it had drifted apart, and in two cases the document was the more
+dangerous half — a security review asserting a fix that was never
+written stops anyone from looking for the gap.
+
+### Fixed
+
+- **bcrypt silently truncated passwords at 72 bytes.** Two different
+  passwords sharing their first 72 bytes produce the same hash, so either
+  one opens the account. Password managers generate exactly that length
+  of passphrase, and nothing told the user most of what they chose was
+  discarded. Demonstrated rather than assumed: under the old scheme, a
+  hash of one 83-character password verifies a different 82-character
+  one.
+
+  Hashing moves to `bcrypt_sha256` (SHA-256 first, then bcrypt the
+  fixed-length digest), which removes the ceiling without giving up
+  bcrypt's slowness. Plain bcrypt stays registered so existing hashes
+  still verify, and `verify_and_update` hands back a replacement that
+  login persists — accounts migrate as people sign in, because the
+  plaintext isn't stored and there is no offline path.
+
+  Two limits stated rather than glossed: an account nobody logs into
+  keeps its old hash, and since the rehash uses whatever password was
+  accepted, an account first accessed with the truncated variant ends up
+  bound to *that*. Neither widens the hole — reaching either already
+  requires knowing the first 72 bytes — and both have tests. The second
+  was found by a test failing, not by reasoning.
+
+  Passwords also gain a 256-character ceiling, which is hygiene rather
+  than a bcrypt limit: nothing should hand an unbounded string to a hash
+  function.
+
+- **`SECURITY.md` claimed a bcrypt fix that never existed.** The A07
+  section read "already fixed earlier in this project — see CHANGELOG.md
+  v0.0.1". The code did a plain `CryptContext(schemes=["bcrypt"])`, and
+  the cited changelog entry doesn't mention bcrypt anywhere.
+
+- **`SECURITY.md`'s access-control section said there was no admin
+  surface** — six versions after v0.0.9 shipped the entire `/admin`
+  content-management API. The most load-bearing sentence in that section
+  said "nothing to review here" about the part most needing review. Now
+  reviewed properly, and the claim is backed by a test that enumerates
+  all 15 admin operations from the generated OpenAPI schema rather than
+  spot-checking one, so a route added later can't quietly escape it.
+
+  The summary table, the scope note and the A02 password line were stale
+  in the same way and have been brought back in line, including the
+  findings from v0.1.4–v0.1.10 that were never recorded there.
+
+- **`npm run lint` didn't run.** `tsc -b --noEmit` fails with TS6310
+  under the TypeScript version the lockfile pins: `--noEmit` applies to
+  the whole build, and the referenced `tsconfig.node.json` is a composite
+  project that must emit declarations. The flag was redundant anyway —
+  `tsconfig.json` already sets `noEmit` — so the script is now `tsc -b`.
+  CI never caught it because CI runs `npm test`, not `npm run lint`.
+
+- **`README.md` was seven versions behind**, still announcing 0.1.3. The
+  version table now carries rows for 0.1.4 through 0.1.11.
+
 ## [0.1.10] — API documentation, off by default and finally working
 
 Sixth finding from the v0.1.3 review. It arrived as one problem and

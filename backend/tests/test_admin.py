@@ -1,6 +1,8 @@
 """Admin content-management API (v0.0.9): authorization, CRUD, and the
 explicit destructive cascades."""
 
+import re
+
 from sqlmodel import select
 
 from app.models import User, VocabularyProgress
@@ -21,6 +23,34 @@ def _admin_headers(client, session, username="admin1", email="admin1@example.com
     session.add(user)
     session.commit()
     return headers
+
+
+def test_every_admin_route_is_gated(client):
+    """Enumerated rather than sampled (v0.1.11). SECURITY.md's A01 section
+    asserts that the whole /admin surface requires the flag; the guard is
+    a single router-level dependency, so a route added with its own
+    APIRouter -- or that dependency being dropped in a refactor -- would
+    open everything at once while the spot-checks below still passed."""
+    from app.main import app
+
+    # Read from the generated schema rather than app.routes: FastAPI keeps
+    # included routers as internal wrapper objects whose shape has changed
+    # across versions, while the schema is a public, stable view of the
+    # same thing. It's produced regardless of ENABLE_API_DOCS -- that
+    # setting decides whether the schema is *served*, not whether it exists.
+    operations = [
+        (method, path)
+        for path, methods in app.openapi()["paths"].items()
+        if path.startswith("/admin")
+        for method in methods
+    ]
+    assert operations, "no /admin operations found -- has the prefix changed?"
+
+    for method, path in operations:
+        # Path params just need to parse; auth is refused before any lookup.
+        concrete = re.sub(r"\{[^}]+\}", "1", path)
+        response = client.request(method.upper(), concrete)
+        assert response.status_code == 401, f"{method.upper()} {path} answered {response.status_code}"
 
 
 def test_admin_endpoints_require_auth(client):

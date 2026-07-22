@@ -1,35 +1,55 @@
 # Security Review — OWASP Top 10 (2021)
 
-**Scope:** Lingua backend (FastAPI) and frontend (React/TypeScript), as of
-v0.0.7. **Method:** manual source review against each OWASP Top 10 2021
-category, plus automated dependency scanning (`pip-audit`, `npm audit`).
-Every finding below was checked against the actual code — not inferred
-from the framework being "generally fine" — and every fix claimed was
-verified with a passing test. This is not a substitute for a professional
-external penetration test (no dynamic/black-box testing, no fuzzing, no
-infrastructure review), but it is a genuine review of this specific
-codebase, not a generic checklist filled in from memory.
+**Scope:** Lingua backend (FastAPI) and frontend (React/TypeScript).
+Originally written at v0.0.7; a second adversarial pass at v0.1.3
+produced the findings fixed across v0.1.4–v0.1.11, and the sections below
+have been brought back in line with the code as part of that.
+**Method:** manual source review against each OWASP Top 10 2021 category,
+plus automated dependency scanning (`pip-audit`, `npm audit`). Every
+finding below was checked against the actual code — not inferred from the
+framework being "generally fine" — and every fix claimed was verified
+with a passing test.
+
+**On that last sentence:** the v0.1.3 pass found two places where this
+document had drifted from the code — a claimed bcrypt fix that was never
+written (A07) and an assertion that no admin surface existed six versions
+after one shipped (A01). Both are recorded in place rather than quietly
+corrected, because how a security document goes wrong is itself worth
+knowing: not by being careless at the time, but by staying still while
+the code moved.
+
+This is not a substitute for a professional external penetration test (no
+dynamic/black-box testing, no fuzzing, no infrastructure review), but it
+is a genuine review of this specific codebase, not a generic checklist
+filled in from memory.
 
 ## Summary
 
 | # | Category | Status |
 |---|---|---|
-| A01 | Broken Access Control | ✅ No issues found |
-| A02 | Cryptographic Failures | ⚠️ 1 medium (weak default secret, startup-warned); low transitive-dep finding resolved post-v0.0.9 (PyJWT migration) |
-| A03 | Injection | ✅ No issues found |
-| A04 | Insecure Design | ✅ Fixed this version (rate limiting, revocation); 1 non-security design note |
-| A05 | Security Misconfiguration | ✅ CORS wildcard finding resolved in v0.1.0 (origin allowlist) |
+| A01 | Broken Access Control | ✅ No issues found — but this section's own text was wrong until v0.1.11, claiming no admin surface existed six versions after one shipped |
+| A02 | Cryptographic Failures | ⚠️ 1 medium (weak default secret, startup-warned); bcrypt's silent 72-byte truncation fixed in v0.1.11; transitive-dep finding resolved post-v0.0.9 (PyJWT) |
+| A03 | Injection | ✅ No issues found in data access; security-log injection found and fixed in v0.1.7 (see A09) |
+| A04 | Insecure Design | ✅ Rate limiting bypassable via `X-Forwarded-For` (v0.1.4) and its attempt table unbounded (v0.1.5), both fixed; 1 non-security design note |
+| A05 | Security Misconfiguration | ✅ CORS wildcard resolved in v0.1.0; `/docs` + `/openapi.json` published unconditionally, fixed in v0.1.10 |
 | A06 | Vulnerable/Outdated Components | ✅ both findings resolved post-v0.0.9 (PyJWT, Vite 8); CI-monitored going forward |
-| A07 | Auth Failures | ✅ Fixed this version (rate limiting, refresh rotation); 1 low (registration enumeration) |
+| A07 | Auth Failures | ✅ A successful login cleared the whole address's brute-force budget (v0.1.6) and refresh-token reuse detection fired on ordinary second tabs (v0.1.8), both fixed; 1 low (registration enumeration) |
 | A08 | Software/Data Integrity Failures | ✅ No issues found |
-| A09 | Logging/Monitoring Failures | ✅ Fixed this version (structured security event logging) |
+| A09 | Logging/Monitoring Failures | ✅ Structured logging added in v0.0.7; its values were forgeable until escaped in v0.1.7 |
 | A10 | Server-Side Request Forgery | ✅ Not applicable to current feature set |
 
-Nothing here is rated Critical or High. The two Medium/Medium-High items
-(default secret key, CORS wildcard) are both things that are fine in this
-development environment and **must** be changed before any real
-deployment — that's called out explicitly below and in
-`backend/README.md`.
+Nothing here is rated Critical. The v0.1.3 pass raised the count of
+Medium findings considerably from what this summary used to claim — six
+of them, all now fixed (v0.1.4–v0.1.11) and each with tests. The pattern
+worth noting is that five of the six were in code written *as* security
+controls: the rate limiter, the reuse detector, the audit log. Defensive
+code gets audited least, because its presence reads as the answer.
+
+One Medium remains open by design: the default `SECRET_KEY`, which is
+fine in development and **must** be changed before any real deployment —
+called out below, in `backend/README.md`, and warned about at startup.
+`DEPLOYMENT.md` carries the rest of the settings a deployment has to get
+right (`TRUSTED_PROXY_HOPS`, `ENABLE_API_DOCS`).
 
 ---
 
@@ -48,14 +68,41 @@ a user's own resource — the resulting progress record is still correctly
 tied to `current_user.id`, so there's no path to read or modify another
 user's review schedule by changing the URL.
 
-There is no admin/role concept in this app yet, so there's no
-privilege-escalation surface to review there — noting that as "not
-applicable yet" rather than silently skipping it.
+**Corrected in v0.1.11.** This section used to end: *"There is no
+admin/role concept in this app yet, so there's no privilege-escalation
+surface to review there — noting that as 'not applicable yet' rather than
+silently skipping it."* That stopped being true in v0.0.9, which added
+the whole `/admin` content-management API. So the most load-bearing
+sentence in this document's access-control section said "nothing to
+review here" about the one part of the app that most needed reviewing,
+for six versions. Reviewed properly now:
+
+**Checked:** every `/admin` operation — 15 of them across 10 paths,
+enumerated from the generated OpenAPI schema rather than spot-checked, so
+a route added later cannot quietly escape the check
+(`test_every_admin_route_is_gated`).
+
+**Finding:** none. Authorization is a single `is_admin` flag, enforced by
+a router-level dependency (`require_admin` in `app/routers/admin.py`), so
+it applies to every operation under the prefix rather than being
+re-remembered per handler. The flag has no path to being set through the
+API: `UserCreate` has no such field, so there is no mass-assignment
+route, and promotion happens only via `scripts/make_admin.py` against the
+database. Tests cover all three properties — unauthenticated (401),
+authenticated-but-not-admin (403), and the mass-assignment attempt.
+
+**Design note (not a vulnerability):** admin deletes cascade
+destructively, taking learners' spaced-repetition progress on removed
+vocabulary with them. That is a deliberate product decision documented in
+`app/routers/admin.py`, with soft-delete as the roadmap answer if learner
+data ever needs to outlive content removal.
 
 ## A02: Cryptographic Failures
 
-**Passwords:** bcrypt via `passlib`, an appropriately slow, salted hash.
-No issues.
+**Passwords:** `bcrypt_sha256` via `passlib` — an appropriately slow,
+salted hash, with the input SHA-256'd first so nothing is silently
+discarded. Plain bcrypt was used until v0.1.11 and truncated at 72 bytes;
+see the finding under A07.
 
 **JWTs:** signed with HS256 (HMAC-SHA256), which is appropriate here since
 only this one backend ever needs to verify tokens (no third party needs
@@ -174,10 +221,36 @@ refresh token now revokes every session for that user, not just itself);
 short-lived (30 min) access tokens instead of the previous 24-hour ones.
 
 **Checked:** password minimum length (8 characters, enforced both ends);
-the bcrypt 72-byte input handling (already fixed earlier in this
-project — see `CHANGELOG.md` v0.0.1); login's error message is
-appropriately generic ("Incorrect username or password", doesn't reveal
-which was wrong).
+login's error message is appropriately generic ("Incorrect username or
+password", doesn't reveal which was wrong).
+
+**Finding (Medium), fixed in v0.1.11: bcrypt silently truncated
+passwords at 72 bytes — and this document previously claimed otherwise.**
+The text here used to read "the bcrypt 72-byte input handling (already
+fixed earlier in this project — see `CHANGELOG.md` v0.0.1)". No such fix
+existed: `app/security.py` did a plain
+`CryptContext(schemes=["bcrypt"])`, and the changelog entry cited does
+not mention bcrypt anywhere. Recording that plainly, because a security
+document asserting a fix that was never written is worse than one
+admitting a gap — the gap gets found, the false assurance stops anyone
+looking.
+
+The behaviour it was wrong about: bcrypt hashes at most 72 bytes and
+ignores the rest, so two different passwords sharing their first 72
+bytes produce the same hash and *either* one opens the account.
+Password-manager passphrases are exactly the length that runs into this,
+and nothing told the user most of what they chose was discarded.
+
+Hashing now uses `bcrypt_sha256` (SHA-256 first, then bcrypt the
+fixed-length digest), which removes the ceiling without giving up
+bcrypt's slowness. Existing bcrypt hashes still verify and are replaced
+on the owner's next successful login — the plaintext is not stored, so
+there is no offline migration. Two honest limits: an account nobody logs
+into keeps its old hash, and because the rehash uses whatever password
+was accepted, an account first accessed with the truncated variant ends
+up bound to that variant. Neither widens the hole (reaching either
+requires already knowing the first 72 bytes), and both are covered by
+tests in `backend/tests/test_password_hashing.py`.
 
 **Finding (Low): registration allows limited account enumeration.**
 `/auth/register`'s error message ("Username or email is already

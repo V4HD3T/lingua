@@ -168,12 +168,25 @@ def login(
     _rate_limit(login_rate_limiter, key, "login")
 
     user = session.exec(select(User).where(User.username == form_data.username)).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    verified, upgraded_hash = (
+        verify_password(form_data.password, user.hashed_password) if user else (False, None)
+    )
+    if not user or not verified:
         # Charged only on failure, so simply logging in -- however often --
         # never eats into the address budget.
         login_ip_rate_limiter.record(ip)
         log_event("login_failed", username=form_data.username, ip=ip)
         raise HTTPException(status_code=401, detail="Incorrect username or password")
+
+    if upgraded_hash is not None:
+        # This account's password was stored under the old bcrypt scheme,
+        # which ignored everything past 72 bytes (v0.1.11). Now is the one
+        # moment the plaintext exists to rehash with, so take it. Nothing
+        # the user sees changes; their next login just uses the new hash.
+        user.hashed_password = upgraded_hash
+        session.add(user)
+        session.commit()
+        log_event("password_hash_upgraded", user_id=user.id)
 
     # Clears this pair only. Previously this reset the whole address, so
     # an attacker holding any account of their own could wipe out a

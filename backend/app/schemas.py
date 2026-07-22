@@ -4,10 +4,16 @@ from typing import Dict, Generic, List, Optional, TypeVar
 from pydantic import BaseModel, EmailStr, Field
 
 
+# Well past any real passphrase, including a long one from a password
+# manager (v0.1.11). Not a bcrypt limit -- bcrypt_sha256 removed that --
+# just a ceiling so an unbounded string can't be sent to be hashed.
+MAX_PASSWORD_LENGTH = 256
+
+
 class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=50)
     email: EmailStr
-    password: str = Field(min_length=8)
+    password: str = Field(min_length=8, max_length=MAX_PASSWORD_LENGTH)
     native_language: str = "en"
 
 
@@ -51,7 +57,7 @@ class PasswordResetRequest(BaseModel):
 
 class PasswordResetConfirm(BaseModel):
     token: str
-    new_password: str = Field(min_length=8)
+    new_password: str = Field(min_length=8, max_length=MAX_PASSWORD_LENGTH)
 
 
 class EmailVerificationConfirm(BaseModel):
