@@ -1,5 +1,6 @@
 import json
 from contextlib import asynccontextmanager
+from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -134,6 +135,21 @@ def seed_data(session: Session) -> None:
     session.commit()
 
 
+def docs_urls(enabled: bool) -> dict[str, Optional[str]]:
+    """The documentation routes to expose, or none of them (v0.1.10).
+
+    Disabling `openapi_url` is what actually closes the door: /docs and
+    /redoc are only shells around that schema, and FastAPI will not mount
+    them without it. Leaving the schema up while hiding the UI would be
+    theatre -- the schema is the part worth having, since it enumerates
+    every endpoint including the admin API, with request shapes and
+    validation rules attached.
+    """
+    if not enabled:
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if settings.secret_key == "change-this-for-development":
@@ -141,13 +157,25 @@ async def lifespan(app: FastAPI):
             "insecure_default_secret_key",
             message="SECRET_KEY is still the development default -- set a real secret before deploying.",
         )
+    if settings.enable_api_docs:
+        # Deliberate in development, worth noticing in a deployment --
+        # same reasoning as the secret-key line above.
+        log_event(
+            "api_docs_enabled",
+            message="/docs, /redoc and /openapi.json are publicly served (ENABLE_API_DOCS).",
+        )
     init_db()
     with Session(engine) as session:
         seed_data(session)
     yield
 
 
-app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    lifespan=lifespan,
+    **docs_urls(settings.enable_api_docs),
+)
 
 # Middleware order note: add_middleware() wraps outside-in, so the first
 # one added here is the innermost. The rate limiter sits innermost on

@@ -92,6 +92,8 @@ uvicorn app.main:app --reload
 Once the server is up:
 - API: http://127.0.0.1:8000
 - Automatic Swagger documentation: http://127.0.0.1:8000/docs
+  (served only when `ENABLE_API_DOCS=true`, which `.env.example` sets;
+  the code default is off so deployments don't publish their own schema)
 - Health check: http://127.0.0.1:8000/health (also reports the running version)
 
 On first startup, the database tables are created automatically and sample

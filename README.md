@@ -43,6 +43,7 @@ docker compose up --build
 ```
 
 → Frontend: http://localhost:8080 · Backend + Swagger: http://localhost:8000/docs
+(Swagger is development-only: `ENABLE_API_DOCS` defaults to off.)
 (Environment variables and cloud deployment: `DEPLOYMENT.md`.)
 
 ### Option B — run directly (two terminals)
