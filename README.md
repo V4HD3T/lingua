@@ -1,6 +1,6 @@
 # Lingua — AI Translation and Language Learning Platform
 
-**Version:** 0.1.11
+**Version:** 0.1.12
 
 A platform offering real-time translation and interactive language
 learning for multilingual users. Built as part of a university graduation
@@ -41,6 +41,7 @@ lives in [CHANGELOG.md](./CHANGELOG.md).
 | 0.1.9 | Days are counted in each learner's timezone, not UTC — streaks, daily goals and review scheduling were rolling over at the wrong hour for everyone outside UTC. |
 | 0.1.10 | API docs (`/docs`, `/redoc`, `/openapi.json`) off by default, and actually rendering when on — CSP had been blanking the Swagger page since v0.0.8. |
 | 0.1.11 | Accuracy pass: bcrypt's silent 72-byte truncation fixed (`bcrypt_sha256`, migrating on login), `SECURITY.md` corrected where it described a fix that never existed and a role model that no longer matched, working `npm run lint`. |
+| 0.1.12 | Email verification decided rather than drifted: not enforced (nothing in this app is harmed by an unverified address), but the status is now visible and there's a `resend-verification` endpoint to act on it. |
 
 ## Quick start
 

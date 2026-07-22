@@ -33,7 +33,7 @@ filled in from memory.
 | A04 | Insecure Design | ✅ Rate limiting bypassable via `X-Forwarded-For` (v0.1.4) and its attempt table unbounded (v0.1.5), both fixed; 1 non-security design note |
 | A05 | Security Misconfiguration | ✅ CORS wildcard resolved in v0.1.0; `/docs` + `/openapi.json` published unconditionally, fixed in v0.1.10 |
 | A06 | Vulnerable/Outdated Components | ✅ both findings resolved post-v0.0.9 (PyJWT, Vite 8); CI-monitored going forward |
-| A07 | Auth Failures | ✅ A successful login cleared the whole address's brute-force budget (v0.1.6) and refresh-token reuse detection fired on ordinary second tabs (v0.1.8), both fixed; 1 low (registration enumeration) |
+| A07 | Auth Failures | ✅ A successful login cleared the whole address's brute-force budget (v0.1.6) and refresh-token reuse detection fired on ordinary second tabs (v0.1.8), both fixed; email verification decided as informational rather than enforced (v0.1.12); 1 low (registration enumeration) |
 | A08 | Software/Data Integrity Failures | ✅ No issues found |
 | A09 | Logging/Monitoring Failures | ✅ Structured logging added in v0.0.7; its values were forgeable until escaped in v0.1.7 |
 | A10 | Server-Side Request Forgery | ✅ Not applicable to current feature set |
@@ -251,6 +251,44 @@ was accepted, an account first accessed with the truncated variant ends
 up bound to that variant. Neither widens the hole (reaching either
 requires already knowing the first 72 bytes), and both are covered by
 tests in `backend/tests/test_password_hashing.py`.
+
+**Decision (v0.1.12): email verification is informational, and is not
+enforced.** The v0.1.3 review flagged that `is_verified` was written by
+`/auth/verify-email` and then read by nothing — the whole flow was
+decorative. That was accurate, and it has been resolved by deciding
+deliberately rather than by adding a gate reflexively.
+
+What verification would protect against here, concretely: someone
+registering with an address they don't control. This app has no
+messaging, no sharing, no public profile and no payments, so such an
+account can't be used to reach or impersonate anyone. The one thing the
+address governs is password reset — and that cuts the other way, since
+the real owner of a mistyped address can use reset to take the account
+back. The residual risk is a stranger's inbox receiving one unsolicited
+verification email.
+
+Weighed against that, enforcement would have cost: every existing account
+has `is_verified = false`, so gating login locks out the entire user base
+at once; the verification link expires after 24 hours and there was no
+way to obtain another; and blocking a subset of endpoints instead would
+mean drawing an arbitrary line and explaining it to users mid-session.
+
+So the finding is closed as *by design*, with two things fixed that were
+genuinely wrong regardless of the decision:
+
+- **The status is now visible.** The app sent a verification email at
+  registration and never mentioned it again — a user could not tell
+  whether they had acted on it or whether it mattered. The progress page
+  now says where they stand, in wording that matches this decision (it
+  states plainly that everything works without it).
+- **There is now a way to act on it** (`POST /auth/resend-verification`,
+  authenticated, rate limited per account, retires any outstanding link).
+  Showing someone an unverified status with no recourse would have been
+  worse than the silence it replaced.
+
+`test_unverified_account_can_use_the_whole_app` pins this: if a
+verification gate is added later, that test fails and the choice has to
+be made on purpose rather than by drift.
 
 **Finding (Low): registration allows limited account enumeration.**
 `/auth/register`'s error message ("Username or email is already

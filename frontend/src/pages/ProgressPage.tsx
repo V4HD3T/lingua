@@ -3,11 +3,58 @@ import { Link } from "react-router-dom";
 import { fetchMyStats } from "../api/stats";
 import { getVocabularySuggestions } from "../api/suggestions";
 import { getMyAchievements } from "../api/achievements";
-import { updateDailyGoal } from "../api/auth";
+import { resendVerification, updateDailyGoal } from "../api/auth";
 import { LoadingState, ErrorState } from "../components/StatusMessage";
 import type { Achievement, UserStats, VocabularySuggestion } from "../types";
+import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 import styles from "./ProgressPage.module.css";
+
+/**
+ * Verification is deliberately not enforced anywhere (v0.1.12) -- see
+ * SECURITY.md's A07 section for the reasoning. But the app was sending a
+ * verification email at registration and then never mentioning it again,
+ * so nobody could tell whether they'd acted on it or whether it mattered.
+ * This says where they stand and offers the one action that follows from
+ * it; the original link expires after 24 hours, so showing the status
+ * without a way to get a new one would be a dead end.
+ */
+function VerificationNotice() {
+  const { user } = useAuth();
+  const toast = useToast();
+  const [isSending, setIsSending] = useState(false);
+
+  if (!user || user.is_verified) return null;
+
+  async function handleResend() {
+    setIsSending(true);
+    try {
+      const { message } = await resendVerification();
+      toast.success(message);
+    } catch {
+      toast.error("Couldn't send the email just now — please try again shortly.");
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  return (
+    <div className={styles.verifyNotice}>
+      <p className={styles.verifyText}>
+        Your email address isn't verified yet. Everything works without it — it just
+        means we can't be sure we can reach you if you ever need to reset your password.
+      </p>
+      <button
+        type="button"
+        className={styles.verifyButton}
+        onClick={handleResend}
+        disabled={isSending}
+      >
+        {isSending ? "Sending..." : "Resend verification email"}
+      </button>
+    </div>
+  );
+}
 
 export function ProgressPage() {
   const toast = useToast();
@@ -57,6 +104,8 @@ export function ProgressPage() {
     <div className={styles.page}>
       <h1>Your progress</h1>
       <p className={styles.subtitle}>Keep your streak alive, finish your courses.</p>
+
+      <VerificationNotice />
 
       {error && <ErrorState message={error} />}
       {!error && !stats && <LoadingState label="Loading progress" />}

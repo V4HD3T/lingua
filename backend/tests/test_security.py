@@ -355,6 +355,96 @@ def test_verify_email_with_invalid_token_fails(client):
     assert response.status_code == 400
 
 
+# --- v0.1.12: verification stays informational, but becomes visible ---------
+#
+# Enforcement was considered and deliberately not adopted -- see
+# SECURITY.md's A07 section. What changed is that the app now tells people
+# where they stand, and a status you can't act on would be worse than
+# silence: the registration link is the only one that ever existed and it
+# expires after 24 hours.
+
+
+def test_unverified_account_can_use_the_whole_app(client, take_seed_quiz):
+    """Pins the decision rather than leaving it implied. If someone later
+    adds a verification gate, this fails and forces the choice to be made
+    again on purpose."""
+    tokens = _register_and_login(client, username="unenforced", email="unenforced@example.com")
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    assert client.get("/auth/me", headers=headers).json()["is_verified"] is False
+
+    assert client.post(
+        "/translate",
+        json={"text": "hello there", "source_lang": "en", "target_lang": "es"},
+        headers=headers,
+    ).status_code == 200
+    assert take_seed_quiz(headers).status_code == 200
+    assert client.post("/vocabulary/1/review", json={"quality": 4}, headers=headers).status_code == 200
+    assert client.get("/users/me/stats", headers=headers).status_code == 200
+
+
+def test_resend_verification_sends_a_fresh_working_link(client):
+    tokens = _register_and_login(client, username="resender", email="resender@example.com")
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    get_email_service().sent_emails.clear()  # drop the registration email
+
+    response = client.post("/auth/resend-verification", headers=headers)
+    assert response.status_code == 200
+
+    sent = get_email_service().sent_emails
+    assert len(sent) == 1
+    assert sent[0].to == "resender@example.com"
+    token = re.search(r"token=([\w-]+)", sent[0].body).group(1)
+    assert client.post("/auth/verify-email", json={"token": token}).status_code == 200
+    assert client.get("/auth/me", headers=headers).json()["is_verified"] is True
+
+
+def test_resending_retires_the_previous_link(client):
+    """Exactly one live link at a time: an older one left working would
+    outlive the reason someone asked for a new one."""
+    tokens = _register_and_login(client, username="tworeq", email="tworeq@example.com")
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    first_token = re.search(
+        r"token=([\w-]+)", get_email_service().sent_emails[0].body
+    ).group(1)
+
+    get_email_service().sent_emails.clear()
+    client.post("/auth/resend-verification", headers=headers)
+    second_token = re.search(
+        r"token=([\w-]+)", get_email_service().sent_emails[0].body
+    ).group(1)
+
+    assert first_token != second_token
+    assert client.post("/auth/verify-email", json={"token": first_token}).status_code == 400
+    assert client.post("/auth/verify-email", json={"token": second_token}).status_code == 200
+
+
+def test_resend_is_a_no_op_once_verified(client):
+    tokens = _register_and_login(client, username="alreadyok", email="alreadyok@example.com")
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    token = re.search(r"token=([\w-]+)", get_email_service().sent_emails[0].body).group(1)
+    client.post("/auth/verify-email", json={"token": token})
+
+    get_email_service().sent_emails.clear()
+    response = client.post("/auth/resend-verification", headers=headers)
+    assert response.status_code == 200
+    assert get_email_service().sent_emails == []
+
+
+def test_resend_requires_a_session(client):
+    # No email parameter exists, so this can't be pointed at someone
+    # else's address -- but it must still refuse anonymous callers.
+    assert client.post("/auth/resend-verification").status_code == 401
+
+
+def test_resend_is_rate_limited_per_account(client):
+    tokens = _register_and_login(client, username="spamsend", email="spamsend@example.com")
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    statuses = [
+        client.post("/auth/resend-verification", headers=headers).status_code for _ in range(5)
+    ]
+    assert 429 in statuses, statuses
+
+
 def test_verify_email_token_is_single_use(client):
     client.post(
         "/auth/register",

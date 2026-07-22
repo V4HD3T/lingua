@@ -313,3 +313,47 @@
     transition: none;
   }
 }
+
+/* Verification status (v0.1.12). Informational, not an alarm: the app
+   deliberately doesn't gate anything on verification, so this uses the
+   accent tint rather than a warning colour -- styling it as an error
+   would contradict what the copy says. */
+.verifyNotice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--accent-100);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.verifyText {
+  flex: 1 1 20rem;
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.verifyButton {
+  background: var(--accent-600);
+  color: var(--text-on-accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.verifyButton:hover:not(:disabled) {
+  background: var(--accent-500);
+}
+
+.verifyButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
