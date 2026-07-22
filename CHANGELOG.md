@@ -11,6 +11,53 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.7] — Security log integrity
+
+Fourth finding from the v0.1.3 security review, and the first that isn't
+about the rate limiter. The previous three protected the login endpoint;
+this one protects the record of what happened at it.
+
+### Fixed
+
+- **The security log could be forged by anyone who could reach
+  `/auth/login`.** Field values went into the line verbatim, and login
+  logs the username it was handed — a value `OAuth2PasswordRequestForm`
+  subjects to no validation whatsoever: no length, no charset, no
+  content rules. A username containing a newline emitted a *second* log
+  line, written by the caller. Demonstrated concretely against the
+  pre-fix code: one `log_event("login_failed", username=…)` call produced
+  two lines, the second a backdated, correctly-formatted
+  `login_succeeded user_id=1 username=admin` — nothing about it
+  distinguishable from a genuine entry.
+
+  This is not a formatting nuisance. SECURITY.md's entire A09 answer is
+  "the events, in a consistent, greppable shape", and every reader of
+  these logs — a human grepping after an incident, or the aggregator
+  that would eventually alert on them — assumes one event per line.
+  Someone who can break that assumption can make the audit trail say the
+  opposite of what happened.
+
+  `log_event` now escapes values through `repr()`, which is the standard
+  reversible answer: newlines become `\n`, and control characters and
+  non-printables — terminal escape sequences that repaint the screen of
+  whoever `cat`s the log, bidirectional overrides that make a value
+  render as something other than what it is — become numeric escapes.
+  Values are also length-capped at 200 characters, because the login form
+  imposes no limit and one request could otherwise write a megabyte of
+  log.
+
+  Values that need no escaping are still written bare, so `user_id=5` and
+  `ip=1.2.3.4` read exactly as before and existing greps keep working —
+  there's a test pinning that specifically, including that non-ASCII
+  usernames (Turkish, Greek) stay unquoted rather than becoming
+  unreadable escapes.
+
+  Fixed centrally in `log_event` rather than at the call sites, so it
+  covers all four places that log user-controlled data today and anything
+  added later. One of those four was introduced by v0.1.6 itself: the
+  login rate-limit key is `"<address>\x00<username>"`, so the username
+  reaches the log through `enforce_rate_limit`'s `key=` field too.
+
 ## [0.1.6] — Login brute-force budgets
 
 Third finding from the v0.1.3 security review. The previous two were
