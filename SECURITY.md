@@ -205,6 +205,20 @@ hits, refresh-token reuse detection (a strong signal of token theft),
 logout, email verification, password reset request/completion, and the
 insecure-default-secret-key warning.
 
+**Finding (Medium), fixed in v0.1.7: the log could be forged.** Field
+values were written into the line verbatim, and `/auth/login` logs the
+username it was given — a value `OAuth2PasswordRequestForm` never
+validates for length, charset, or content. A username containing a
+newline therefore emitted a *second* log line, composed by the caller: a
+backdated, correctly-formatted `login_succeeded user_id=1 username=admin`
+is indistinguishable from a real one once written. Everything above in
+this section assumes one event per line; a caller who can break that
+assumption can make this log say the opposite of what happened, which
+defeats the control rather than merely untidying it. Values are now
+escaped (and length-capped) before being written — see `_render` in
+`app/services/security_logging.py`. Values needing no escaping are still
+written bare, so the line format greps were written against is unchanged.
+
 **Honest limitation:** this logs to stdout via Python's standard
 `logging` module. There is no log aggregation, alerting, or retention
 policy — building one is genuinely infrastructure work (shipping logs to
