@@ -454,6 +454,47 @@ def test_security_headers_present(client):
     assert "max-age" in response.headers["strict-transport-security"]
 
 
+def test_data_routes_keep_the_strict_csp(client):
+    """v0.1.10 loosens CSP for the documentation shell, which loads its
+    bundle from a CDN. Every route that serves data must be untouched by
+    that -- no CDN origin should appear anywhere else."""
+    for path in ("/health", "/languages", "/courses"):
+        csp = client.get(path).headers["content-security-policy"]
+        assert csp == "default-src 'self'", path
+
+
+def test_docs_csp_is_not_served_while_docs_are_disabled(client, monkeypatch):
+    """The relaxed policy is gated on the feature being on, not merely on
+    the path. With docs disabled these paths 404 -- and a 404 must not
+    come back carrying a CDN allowance."""
+    from app.config import settings
+
+    assert settings.enable_api_docs is False
+    response = client.get("/docs")
+    assert response.status_code == 404
+    assert response.headers["content-security-policy"] == "default-src 'self'"
+
+
+def test_docs_csp_allows_the_swagger_bundle_when_enabled(client, monkeypatch):
+    """And when they are on, the policy has to actually permit the assets
+    the page loads -- otherwise /docs answers 200 and renders nothing,
+    which is what it did from v0.0.8 until this version."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "enable_api_docs", True)
+    # Any path in the docs set: the header is decided by the middleware,
+    # independently of whether this app instance mounted the route.
+    csp = client.get("/docs").headers["content-security-policy"]
+    assert "https://cdn.jsdelivr.net" in csp
+
+    # 'unsafe-inline' for scripts is required, not incidental: FastAPI
+    # boots Swagger from an inline <script>. Dropping it puts the page
+    # back to answering 200 and drawing nothing -- confirmed in a browser,
+    # where the bundle loaded, defined SwaggerUIBundle, and never mounted.
+    script_directive = [d for d in csp.split(";") if d.strip().startswith("script-src")][0]
+    assert "'unsafe-inline'" in script_directive
+
+
 # --- Optional-auth endpoints: invalid tokens must 401, not silently downgrade ---
 
 

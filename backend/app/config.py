@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_name: str = "AI Translation and Language Learning Platform"
-    app_version: str = "0.1.9"
+    app_version: str = "0.1.10"
     database_url: str = "sqlite:///./app.db"
 
     secret_key: str = "change-this-for-development"
@@ -98,6 +98,21 @@ class Settings(BaseSettings):
     # a fresh login/translate/global rate-limit budget on every single
     # request just by varying a header.
     trusted_proxy_hops: int = 0
+
+    # Serve /docs, /redoc and /openapi.json (v0.1.10).
+    #
+    # Off by default so that forgetting to configure anything is the safe
+    # outcome. The schema enumerates every endpoint this app has, the
+    # admin API included, with request shapes and validation rules
+    # attached -- a map worth handing nobody. Development turns it on
+    # explicitly: .env.example (which backend/README.md tells you to copy)
+    # and docker-compose.yml both set it, so the documented dev flows are
+    # unchanged and only a real deployment has to decide.
+    #
+    # The alternative -- on by default, deployments opt out -- puts the
+    # burden on remembering, which is exactly how v0.1.4's proxy setting
+    # went wrong.
+    enable_api_docs: bool = False
 
     frontend_base_url: str = "http://localhost:5173"
 

@@ -25,6 +25,10 @@ services:
       DATABASE_URL: sqlite:////data/app.db
       REDIS_URL: redis://redis:6379/0
       FRONTEND_BASE_URL: http://localhost:8080
+      # This compose file is the local development stack, and the READMEs
+      # point at Swagger here. The image default is off -- see
+      # ENABLE_API_DOCS in backend/.env.example.
+      ENABLE_API_DOCS: "true"
       # Real deployments must set a real value (see DEPLOYMENT.md); the
       # app logs a loud warning on the default.
       SECRET_KEY: ${SECRET_KEY:-change-this-for-development}

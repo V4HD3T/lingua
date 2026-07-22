@@ -9,6 +9,7 @@ deployment guide told operators to import."""
 from pathlib import Path
 
 from app.config import Settings
+from app.main import docs_urls
 from app.services.content_import import CONTENT_DIR, available_packs
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -62,6 +63,47 @@ def test_preflight_succeeds_for_an_authenticated_call(client):
         },
     )
     assert response.status_code == 200
+
+
+# --- API documentation exposure (v0.1.10) -----------------------------------
+
+
+def test_api_docs_are_off_unless_asked_for():
+    """The whole point of the default. A deployment that configures
+    nothing must not publish a map of its own API -- admin routes,
+    request shapes and validation rules included."""
+    assert Settings().enable_api_docs is False
+
+
+def test_disabling_docs_removes_the_schema_too():
+    """Hiding the UI while leaving /openapi.json up would be theatre: the
+    schema is the part worth having."""
+    assert docs_urls(False) == {"docs_url": None, "redoc_url": None, "openapi_url": None}
+
+
+def test_enabling_docs_restores_all_three_routes():
+    assert docs_urls(True) == {
+        "docs_url": "/docs",
+        "redoc_url": "/redoc",
+        "openapi_url": "/openapi.json",
+    }
+
+
+def test_running_app_serves_no_docs_by_default(client):
+    # The app object under test was built with the default settings.
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path).status_code == 404, f"{path} is exposed"
+
+
+def test_development_setups_switch_docs_back_on():
+    """backend/README.md's setup step is `cp .env.example .env`, and the
+    READMEs point at Swagger under docker compose. If either stopped
+    enabling it, the code default would silently take the documented dev
+    experience away."""
+    env_example = (BACKEND_DIR / ".env.example").read_text(encoding="utf-8")
+    compose = (BACKEND_DIR.parent / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "ENABLE_API_DOCS=true" in env_example
+    assert "ENABLE_API_DOCS" in compose
 
 
 # --- content packs reach the runtime ----------------------------------------

@@ -11,6 +11,62 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.10] — API documentation, off by default and finally working
+
+Sixth finding from the v0.1.3 review. It arrived as one problem and
+turned out to be two, in opposite directions: the docs were exposed where
+they shouldn't be, and broken where they should have worked.
+
+### Fixed
+
+- **`/docs`, `/redoc` and `/openapi.json` were served publicly, always.**
+  The schema enumerates every endpoint this app has — the admin API
+  included — with request shapes and validation rules attached. That's a
+  map worth handing nobody, and there was no way to turn it off.
+
+  `ENABLE_API_DOCS` now gates all three, and it defaults to **off**, so a
+  deployment that configures nothing gets the safe outcome. Development
+  turns it on explicitly, in the two places the project already documents
+  as the dev setup: `backend/.env.example` (which `backend/README.md`
+  tells you to copy) and `docker-compose.yml`. So the documented flows
+  are unchanged and only a real deployment has to decide. On-by-default
+  with an opt-out would have put the burden on remembering, which is
+  precisely how v0.1.4's proxy setting went wrong.
+
+  Disabling `openapi_url` is what actually closes the door — `/docs` and
+  `/redoc` are shells around that schema and FastAPI won't mount them
+  without it. Hiding the UI while leaving the schema up would have been
+  theatre. There's a startup log line when docs are on, next to the
+  existing default-secret warning, and a post-deploy checklist step.
+
+- **And `/docs` had been rendering a blank page since v0.0.8.** Found
+  while verifying the above. Swagger UI is a shell that pulls its bundle
+  from jsdelivr, and `SecurityHeadersMiddleware` has been sending
+  `default-src 'self'` on every response since it landed — so the page
+  answered 200 and drew nothing. That module's own docstring described
+  this as something to watch out for "if you later add Swagger UI in
+  production", when Swagger UI was already there.
+
+  CSP is now relaxed on the documentation routes only, and only while
+  docs are enabled. Every route that serves data keeps `default-src
+  'self'` exactly as before, with a test pinning that.
+
+  The relaxation includes `'unsafe-inline'` for scripts, which deserves
+  saying out loud rather than hiding in a diff: FastAPI boots Swagger
+  from an inline `<script>`, so without it the bundle downloads, defines
+  its global, and never mounts. The first attempt at this fix omitted it
+  and was verified in a real browser — the page loaded 422 KB of
+  JavaScript and rendered an empty body. Avoiding `'unsafe-inline'`
+  properly would mean replacing FastAPI's generated HTML with a
+  nonce-stamped copy and maintaining that bootstrap across FastAPI
+  versions, for a page that is off in production and renders no
+  user-controlled content: only a static shell and this app's own schema.
+
+  Verified in a browser rather than by header assertions alone: with the
+  fix, `/docs` mounts and renders all 44 operations across 10 tags; with
+  docs disabled, `/docs`, `/redoc` and `/openapi.json` all return 404
+  from a real uvicorn process.
+
 ## [0.1.9] — Whose day is it
 
 A finding the v0.1.3 review filed as low severity and got wrong. It was

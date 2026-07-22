@@ -12,6 +12,7 @@ docker compose up --build
 ```
 
 - Frontend: http://localhost:8080 · Backend + Swagger: http://localhost:8000/docs
+  (compose sets `ENABLE_API_DOCS=true`; deployments leave it off — see below)
 - SQLite persists on the `lingua-data` volume; Redis caching is on.
 - `docker compose down -v` wipes the data volume for a fresh start.
 
@@ -30,6 +31,7 @@ root directory at `backend/`.
 | `CORS_ALLOWED_ORIGINS` | same Vercel URL (comma-separated if several) | Browser origins allowed to call the API. Setting it replaces the development defaults entirely — deployments get exactly what they ask for. |
 | `REDIS_URL` | provision the platform's Redis add-on and paste its URL | Optional -- the cache silently disables itself when unset. |
 | `TRUSTED_PROXY_HOPS` | `1` on all three platforms | **Set this, or rate limiting counts every visitor as one client.** All three terminate TLS at their own proxy, so the app never sees the real client address on the socket — it has to read it out of `X-Forwarded-For`. See below. |
+| `ENABLE_API_DOCS` | leave unset | Off by default as of v0.1.10, which is the intended production state — the schema at `/openapi.json` enumerates every endpoint, admin routes included. Set `true` only for a staging box you want to browse. |
 | `USE_MOCK_TRANSLATION` | `true` for now | The real NLLB model needs ~3&nbsp;GB and a beefier instance; keep the mock until that's sized. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `SMTP_FROM_ADDRESS` | your mail provider's values | Unset = mock email service: verification/reset emails are logged, not sent. Fine for a demo, not for real users. |
 
@@ -109,7 +111,10 @@ Idempotent, so re-running after a redeploy is safe. See
 5. The app is installable: open the deployed frontend on a phone and
    check the browser offers "Add to home screen" (PWA manifest + service
    worker are served over HTTPS).
-6. Rate limiting sees real client IPs — check **both** directions, since
+6. `GET /docs` and `GET /openapi.json` both return **404**. If either
+   answers 200, `ENABLE_API_DOCS` is set somewhere it shouldn't be, and
+   the deployment is publishing a full map of its own API.
+7. Rate limiting sees real client IPs — check **both** directions, since
    each failure mode is invisible from the other side:
    - Hit an auth endpoint 6x. The 6th returns 429, and the
      `rate_limit_exceeded` log line shows a real client address rather
