@@ -1,6 +1,6 @@
 # Lingua — AI Translation and Language Learning Platform
 
-**Version:** 0.1.13
+**Version:** 0.1.14
 
 A platform offering real-time translation and interactive language
 learning for multilingual users. Built as part of a university graduation
@@ -43,6 +43,7 @@ lives in [CHANGELOG.md](./CHANGELOG.md).
 | 0.1.11 | Accuracy pass: bcrypt's silent 72-byte truncation fixed (`bcrypt_sha256`, migrating on login), `SECURITY.md` corrected where it described a fix that never existed and a role model that no longer matched, working `npm run lint`. |
 | 0.1.12 | Email verification decided rather than drifted: not enforced (nothing in this app is harmed by an unverified address), but the status is now visible and there's a `resend-verification` endpoint to act on it. |
 | 0.1.13 | Removed a SQLite file committed by accident in v0.0.9, and closed the cause: a `.env` value's inline `;` comment became part of the filename, and `.gitignore` matched only the name it expected. |
+| 0.1.14 | Page tests for all 13 pages, the layer whose only signal had been that it compiled — and the frontend suite made runnable on Node ≥ 24, where a global `localStorage` had been shadowing jsdom's since before it was noticed. Test counts across the docs now match what runs. |
 
 ## Quick start
 
@@ -83,13 +84,13 @@ and architecture notes.
 
 ## Status
 
-- ✅ Backend: auth (+ refresh tokens, email verification, password reset, rate limiting, daily goals), translation (+ confidence/alternatives/idiom warnings/language detection), courses/lessons (+ grammar/cultural notes), quizzes (4 types + adaptive difficulty), progress/streak, spaced repetition, personalized suggestions, achievement badges — 168 backend + 16 frontend tests passing
+- ✅ Backend: auth (+ refresh tokens, email verification, password reset, rate limiting, daily goals), translation (+ confidence/alternatives/idiom warnings/language detection), courses/lessons (+ grammar/cultural notes), quizzes (4 types + adaptive difficulty), progress/streak, spaced repetition, personalized suggestions, achievement badges — 267 backend + 74 frontend tests passing
 - ✅ Frontend: a working interface for every flow (React + TypeScript)
 - ✅ Speech: voice input (translation + pronunciation practice) and voice output (translations + vocabulary + listening quiz questions), both browser-based, no model download
 - ✅ Progress tracking: daily streak, daily review goal, per-course completion percentage, achievement badges (`/progress`)
 - ✅ Spaced repetition: SM-2-scheduled vocabulary review (`/review`)
 - ✅ Security: app-wide + per-endpoint rate limiting, refresh token rotation, security headers, CI dependency scanning, real OWASP Top 10 audit (`SECURITY.md`)
-- ✅ Test & CI infrastructure: pytest + coverage gate and frontend type-check/build on every push (`.github/workflows/ci.yml`), paginated list endpoints
+- ✅ Test & CI infrastructure: pytest + coverage gate, frontend unit + page tests, and a type-check/build on every push (`.github/workflows/ci.yml`), paginated list endpoints
 - ✅ Data layer & content ops: Alembic migrations (with a migration-drift test), served-set quiz grading via QuizSession, admin CRUD API for all course/quiz content (`scripts/make_admin.py` to promote)
 - ✅ Ops & deploy: Docker + docker-compose (one command), Redis translation cache with graceful degradation, CORS locked to the configured frontend origin, deployment guide + Railway/Vercel configs (`DEPLOYMENT.md`)
 - ✅ UX & accessibility: dark mode with pre-paint theme resolution, app-wide toast notifications, copy-to-clipboard, WCAG AA-audited palette (30/30 pairs, both themes), landmarks + skip link + labeled controls

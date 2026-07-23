@@ -11,6 +11,60 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.14] — The pages get tested, and the docs stop overstating
+
+Two findings from a review pass, one of which turned up a third thing on
+the way: the frontend suite doesn't actually run on a current Node.
+
+### Fixed
+
+- **The whole frontend suite was failing on Node ≥ 24 — all 23 tests, at
+  the first `localStorage` call.** Node 24 defines a global
+  `localStorage` that stays inert unless the process was started with
+  `--localstorage-file`, and vitest's jsdom environment only copies window
+  properties `globalThis` doesn't already have. So the inert binding won,
+  jsdom's real Storage never got installed, and every token read died on
+  `undefined`. CI is on Node 22, where Web Storage is still behind a flag
+  and jsdom's version survives — the suite was green there while being
+  unrunnable on any modern local machine. `src/test/setup.ts` now installs
+  an in-memory Storage when the runtime hasn't left jsdom's in place.
+
+- **Documentation claiming test counts from several versions ago.**
+  `README.md` said 168 backend + 16 frontend, `TESTING.md` said 148,
+  `ARCHITECTURE.md` said 67, `backend/README.md` said 106 — against a real
+  267 backend + 74 frontend. The CI workflow's own comment described the
+  coverage floor as sitting below "the current 94%"; it is 93%. Every
+  number in this entry was measured, not carried over.
+
+### Added
+
+- **Page tests for all 13 pages** (51 tests, `src/pages/*.test.tsx`),
+  where there had been none: the pages were the one layer whose only
+  automated signal was that they compiled. Rendered with the router, auth
+  context and toasts around them (`src/test/harness.tsx`) and their API
+  modules stubbed, so what's asserted is what each page *sends* and what
+  it shows when the answer is bad — not its markup.
+
+  The ones worth naming: Translate's 400 ms debounce and the request-id
+  guard that keeps a slow answer from overwriting a newer one; Quiz's
+  answers going out keyed by question id with the served-set `session_id`,
+  plus both pre-submit guards; Review's SM-2 quality values (1/3/5) behind
+  the Again/Good/Easy labels, and the card staying put when a rating fails
+  to save; Progress's goal-bounds check, which has to live in the page
+  because the editor isn't a form (v0.1.7); History's next page requested
+  at the offset the list ends at; VerifyEmail spending its single-use
+  token exactly once under StrictMode (v0.1.12); and LessonDetail asking
+  about a quiz through the unauthenticated existence check, so browsing a
+  lesson never mints a QuizSession.
+
+  Two things this found about the pages as written, neither a defect:
+  QuizPage's "answer every question" guard is unreachable in a browser
+  (the inputs are `required`, so the browser stops it first) except for
+  whitespace-only answers, which is the case the test now covers; and
+  QuizPage fetches the quiz even for a logged-out visitor it immediately
+  turns away — harmless, since an unauthenticated fetch records no
+  session, but it is a request for nothing.
+
 ## [0.1.13] — A database that shouldn't have been here
 
 The last item from the v0.1.3 review, and the smallest — but the cause

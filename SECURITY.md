@@ -357,7 +357,7 @@ content from a link).
 ## For the record: what "done" means here
 
 Every ✅ above reflects specific code reviewed and, where relevant,
-specific tests added (`tests/test_security.py`, 21 tests). Every ⚠️ is
+specific tests added (`tests/test_security.py`, 56 tests). Every ⚠️ is
 either genuinely unresolved and documented as a pre-production requirement
 (CORS, default secret), or resolved-for-this-app's-actual-usage-and-explained
 rather than hand-waved (the `ecdsa` finding). None of this replaces an

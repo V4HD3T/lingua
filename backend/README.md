@@ -105,7 +105,7 @@ data is added (5 languages, 1 course, 1 lesson, 2 vocabulary items, 1 quiz).
 pytest -v
 ```
 
-106 tests; covers authentication (incl. refresh tokens, rate limiting,
+267 tests; covers authentication (incl. refresh tokens, rate limiting,
 verification, password reset), daily goals, translation (anonymous + registered
 user, confidence/alternatives, idiom warnings), language detection,
 lesson/course flows, quizzes, spaced repetition, personalized vocabulary
@@ -202,7 +202,7 @@ app/
     review.py        /users/me/review-queue, /vocabulary/{id}/review (spaced repetition)
     suggestions.py   /users/me/vocabulary-suggestions (personalized, from translation history)
     achievements.py  /users/me/achievements
-tests/               pytest test suite (106 tests)
+tests/               pytest test suite (267 tests)
 ```
 
 ## Authentication flow

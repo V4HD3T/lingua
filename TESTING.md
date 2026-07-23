@@ -6,8 +6,8 @@ aspirational.
 
 | Layer | Question it answers | Tooling | Size | Where it runs |
 | --- | --- | --- | --- | --- |
-| Backend unit + integration | Does every endpoint and service behave, including the failure paths? | pytest (+ pytest-cov) | 148 tests, 93% coverage (CI gate: 88%) | `backend/`, every push (CI `backend-tests`) |
-| Frontend unit | Do the critical client pieces behave in isolation? | Vitest + React Testing Library (jsdom) | 16 tests | `frontend/src/**/*.test.*`, every push (CI `frontend-build`) |
+| Backend unit + integration | Does every endpoint and service behave, including the failure paths? | pytest (+ pytest-cov) | 267 tests, 93% coverage (CI gate: 88%) | `backend/`, every push (CI `backend-tests`) |
+| Frontend unit + page | Do the client pieces behave in isolation, and does each page do the right thing with them? | Vitest + React Testing Library (jsdom) | 74 tests (23 unit, 51 page) | `frontend/src/**/*.test.*`, every push (CI `frontend-build`) |
 | End-to-end | Do the seams hold — real browser, real backend, full journey? | Playwright (Chromium) | 1 journey spec | `frontend/e2e/`, every push (CI `e2e`) |
 | Load | What happens under pressure — and does the rate limiter actually engage? | Locust | 4 scenarios, 2 modes | `backend/loadtest/`, run manually |
 
@@ -23,13 +23,13 @@ behaviour including the `/health` exemption and `Retry-After` headers,
 the served-set quiz-grading contract, Turkish case-folding, and the
 translation cache's outage-degradation guarantees.
 
-## Frontend unit (Vitest)
+## Frontend unit + page (Vitest)
 
 ```bash
 cd frontend && npm test        # or: npm run test:watch
 ```
 
-What's deliberately covered first (highest-risk client logic):
+### Unit — the highest-risk client logic, covered first
 
 - **`api/client` token refresh** — transparent 401→refresh→retry,
   session teardown on refresh rejection, and the concurrency guarantee:
@@ -44,9 +44,48 @@ What's deliberately covered first (highest-risk client logic):
 - **SentenceOrderInput** — order building, word return, duplicate words
   by position.
 
-Config note: `vitest.config.ts` is separate from `vite.config.ts` on
-purpose — the production build config stays untouched, and Vitest brings
-its own Vite internally.
+### Page — all 13 pages, one file each
+
+Pages were the gap this layer closed (v0.1.14): until then their only
+automated signal was that they compiled. Each page is rendered with the
+router, auth context and toasts around it (`src/test/harness.tsx`) and its
+API modules stubbed, so what's asserted is behaviour rather than markup —
+what the page sends, and what it shows when the answer is bad.
+
+What that pins down, page by page:
+
+- **Translate** — the 400 ms debounce (one request per pause, not per
+  keystroke) and the request-id guard that stops a slow answer from
+  overwriting a newer one.
+- **Quiz** — answers submitted keyed by question id together with the
+  served-set `session_id`, both pre-submit guards (unanswered questions,
+  missing session), and that "Try again" starts genuinely empty.
+- **Review** — SM-2 quality values behind the Again/Good/Easy labels
+  (1/3/5, not button positions), the card staying put when a rating fails
+  to save, and the answer hidden again on the next card.
+- **Progress** — the daily-goal bounds check that has to live in the page
+  because the editor isn't a form (v0.1.7), and the verification notice
+  appearing only for the unverified.
+- **History** — the second page requested at the offset the list ends at,
+  and appended rather than replacing.
+- **Login / Register / Forgot / Reset / Verify** — the server's own
+  message shown on failure with the form still usable; the verification
+  page's single-use token spent exactly once under StrictMode (v0.1.12).
+- **Courses / Course detail / Lesson detail** — "empty" told apart from
+  "failed to load", and the lesson page asking about a quiz through the
+  unauthenticated existence check, so browsing never mints a QuizSession.
+
+Config notes:
+
+- `vitest.config.ts` is separate from `vite.config.ts` on purpose — the
+  production build config stays untouched, and Vitest brings its own Vite
+  internally.
+- `src/test/setup.ts` installs an in-memory `localStorage` when the
+  runtime doesn't leave jsdom's in place. Node ≥ 24 defines a global
+  `localStorage` that stays inert without `--localstorage-file`, and
+  vitest's jsdom environment doesn't overwrite globals Node already
+  defined — so on Node 24+ every `localStorage` call in the suite threw,
+  while CI's Node 22 (Web Storage still behind a flag) stayed green.
 
 ## End-to-end (Playwright)
 
@@ -109,10 +148,16 @@ seconds of every run.
 
 ## Known gaps (kept honest)
 
-- Register-form E2E flow (user seeded via API instead).
+- Register-form E2E flow (user seeded via API instead) — the form itself
+  is covered at the page level, but not through a real browser.
 - One journey spec only: it covers the critical path end to end, but
   error paths (bad credentials, expired session, failed submission) are
-  still covered only at the unit and integration layers.
+  still covered only at the unit, page and integration layers.
+- Speech input/output paths (pronunciation practice, listening questions,
+  read-aloud) aren't exercised: jsdom has neither of the Web Speech APIs,
+  so the page tests always take the unsupported branch — the same one a
+  Firefox user gets. The supported branch has no automated coverage at
+  any layer.
 - No visual-regression or screen-reader/axe automation yet (the v0.1.1
   contrast audit was static computation).
 - Postgres path documented but untested; load numbers predate real model
