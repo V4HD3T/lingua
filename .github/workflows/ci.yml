@@ -27,7 +27,7 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - name: Install dependencies
         run: pip install -r requirements.txt
-      # The floor (88%) sits deliberately below the current 94% so a
+      # The floor (88%) sits deliberately below the current 93% so a
       # legitimately hard-to-test addition doesn't block a push, while a
       # real collapse in coverage still fails loudly. Ratchet it up as
       # coverage grows; never ratchet it down to make a failure pass.
@@ -51,9 +51,10 @@ jobs:
         # Node 22: Vite 8's engine floor is >=20.19 / >=22.12, and GitHub
         # is retiring Node 20 runners anyway.
         run: npm ci
-      # "npm run build" is tsc -b && vite build, so this is both the
-      # type-check (the frontend's only automated correctness signal until
-      # the v0.1.x test versions) and proof the production bundle builds.
+      # "npm run build" is tsc -b && vite build: the type-check and proof
+      # that the production bundle builds. The unit + page suite above is
+      # what checks behaviour; this checks that it all still compiles and
+      # ships (test files are inside src/, so tsc -b type-checks them too).
       - name: Run unit tests (Vitest)
         run: npm test
       - name: Type-check and build

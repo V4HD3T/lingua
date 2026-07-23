@@ -142,7 +142,9 @@ this environment)
   stat tiles, and per-course progress bars. "Progress" link in the NavBar
   (visible when logged in).
 
-Backend: **67 tests passing**. See `backend/README.md` and
+Currently **267 backend + 74 frontend tests passing** (the per-version
+counts below are what each version added, not the running total). See
+`TESTING.md` for the full strategy, and `backend/README.md` /
 `frontend/README.md` for setup and run instructions.
 
 **v0.0.4 — Automatic language detection, text-to-speech, spaced
@@ -246,6 +248,8 @@ except running real NLLB, which needs your own machine)
 | — | ✅ Done (v0.1.1) | Dark mode, toast system, clipboard, WCAG AA contrast audit + a11y fixes |
 | — | ✅ Done (v0.1.2) | Vitest frontend units, Playwright E2E in CI, Locust load tests, TESTING.md |
 | — | ✅ Done (v0.1.3) | PWA (manifest, service worker, opt-in updates), JSON content packs + importer |
+| — | ✅ Done (v0.1.4–v0.1.13) | Security-review follow-ups, one version each (per-version summaries in README's version table) |
+| — | ✅ Done (v0.1.14) | Page tests for all 13 frontend pages; frontend suite fixed on Node ≥ 24 |
 | 1 | pending — your machine | Real NLLB model integration (confirmed empirically: no network access to huggingface.co in this environment) |
 | 5 | pending | End-to-end testing, usability evaluation, bug fixing |
 | 6 | pending | Project report, documentation, defense presentation |
@@ -257,6 +261,6 @@ remaining design or implementation work.
 
 ## 7. Next step
 
-Content expansion, frontend testing, the end-to-end testing/usability
-phase, or a session on your own machine to actually activate real NLLB —
-which one?
+Content expansion, the end-to-end testing/usability phase (the E2E suite
+is still one journey spec), the academic deliverables, or a session on
+your own machine to actually activate real NLLB — which one?
