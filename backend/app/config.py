@@ -1,11 +1,30 @@
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Which .env file to read, if any (v0.1.15).
+#
+# Overridable so the test suite can opt out of reading one at all. Tests
+# exist to check what the *code* does, and merging in whatever .env the
+# developer happens to have makes the answer depend on their machine.
+# That was not hypothetical: backend/README.md tells you to run
+# `cp .env.example .env`, .env.example deliberately sets
+# ENABLE_API_DOCS=true because it is the documented development setup, and
+# three tests assert that the code default is off. So following this
+# project's own instructions broke the suite -- while CI, which has no
+# .env, stayed green and said nothing.
+#
+# An empty value means "no file"; pydantic-settings then reads real
+# environment variables and these defaults, which is exactly what a test
+# run should see.
+_ENV_FILE = os.getenv("LINGUA_ENV_FILE", ".env") or None
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_ENV_FILE, extra="ignore")
 
     app_name: str = "AI Translation and Language Learning Platform"
-    app_version: str = "0.1.14"
+    app_version: str = "0.1.15"
     database_url: str = "sqlite:///./app.db"
 
     secret_key: str = "change-this-for-development"

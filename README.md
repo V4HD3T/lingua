@@ -1,6 +1,6 @@
 # Lingua — AI Translation and Language Learning Platform
 
-**Version:** 0.1.14
+**Version:** 0.1.15
 
 A platform offering real-time translation and interactive language
 learning for multilingual users. Built as part of a university graduation
@@ -44,6 +44,7 @@ lives in [CHANGELOG.md](./CHANGELOG.md).
 | 0.1.12 | Email verification decided rather than drifted: not enforced (nothing in this app is harmed by an unverified address), but the status is now visible and there's a `resend-verification` endpoint to act on it. |
 | 0.1.13 | Removed a SQLite file committed by accident in v0.0.9, and closed the cause: a `.env` value's inline `;` comment became part of the filename, and `.gitignore` matched only the name it expected. |
 | 0.1.14 | Page tests for all 13 pages, the layer whose only signal had been that it compiled — and the frontend suite made runnable on Node ≥ 24, where a global `localStorage` had been shadowing jsdom's since before it was noticed. Test counts across the docs now match what runs. |
+| 0.1.15 | The backend suite stopped reading the developer's `.env`: following `backend/README.md`'s own `cp .env.example .env` step failed three tests, and CI (no `.env`) never saw it. |
 
 ## Quick start
 

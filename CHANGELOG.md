@@ -11,6 +11,44 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.15] — Following the setup instructions broke the tests
+
+Found while re-running the suite mid-session: three tests started failing
+that had passed an hour earlier, with no code change between. What had
+changed was that `backend/.env` now existed.
+
+### Fixed
+
+- **The backend suite read the developer's `.env`.** `backend/README.md`
+  tells you to run `cp .env.example .env`; `.env.example` sets
+  `ENABLE_API_DOCS=true`, deliberately, because that is the documented
+  development setup. Three tests assert that the *code* default is off —
+  and they read it back through `Settings()`, which merges that same
+  `.env`. So doing what the README says failed the suite, and undoing it
+  fixed it.
+
+  CI never saw any of this: a fresh checkout has no `.env`, so the
+  pipeline was green the entire time. Same shape as v0.1.14's Node
+  `localStorage` finding, one layer over — the environment CI happens to
+  have is not the environment anyone develops in.
+
+  `app/config.py` now takes its env-file path from `LINGUA_ENV_FILE`
+  (empty = read none), and `tests/conftest.py` sets it before anything
+  imports the settings singleton. The suite is hermetic by construction
+  rather than by nobody having configured anything. Verified both ways:
+  274 pass with `.env` present, 274 with it moved aside.
+
+- **`test_api_docs_are_off_unless_asked_for` now says what it means**,
+  spelling `Settings(_env_file=None)` rather than depending on the
+  conftest mechanism it is one of the tests protecting.
+
+### Added
+
+- **`test_the_suite_reads_no_env_file`** — the mechanism asserted
+  directly, because the tests it protects fail in a way that reads like a
+  code bug rather than a configuration leak, which is precisely why this
+  cost an hour to place.
+
 ## [0.1.14] — The pages get tested, and the docs stop overstating
 
 Two findings from a review pass, one of which turned up a third thing on

@@ -1,5 +1,15 @@
-import pytest
-from fastapi.testclient import TestClient
+import os
+
+# Before anything imports app.config, which builds its settings singleton
+# at import time (v0.1.15). The suite must test the code, not the .env a
+# developer copied from .env.example while following backend/README.md --
+# that file turns API docs on for development, and three tests assert the
+# code default is off. setdefault, so anyone who deliberately points the
+# variable somewhere keeps their choice.
+os.environ.setdefault("LINGUA_ENV_FILE", "")
+
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 

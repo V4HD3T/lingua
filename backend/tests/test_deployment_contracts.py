@@ -6,6 +6,7 @@ CORS allowlist that rejected the origin the E2E suite actually browses
 from, and a Docker image that omitted the content packs its own
 deployment guide told operators to import."""
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -76,8 +77,33 @@ def test_preflight_succeeds_for_an_authenticated_call(client):
 def test_api_docs_are_off_unless_asked_for():
     """The whole point of the default. A deployment that configures
     nothing must not publish a map of its own API -- admin routes,
-    request shapes and validation rules included."""
-    assert Settings().enable_api_docs is False
+    request shapes and validation rules included.
+
+    `_env_file=None` states what is being asserted: the *code* default,
+    not the value after a local .env has had its say. The suite already
+    runs with no env file (see conftest), but this test is the one place
+    the distinction is the entire point, so it says so itself rather than
+    relying on that."""
+    assert Settings(_env_file=None).enable_api_docs is False
+
+
+def test_the_suite_reads_no_env_file(monkeypatch):
+    """The suite must not depend on whether the developer running it
+    followed backend/README.md's `cp .env.example .env` step (v0.1.15).
+
+    That step is *documented*, and .env.example turns API docs on because
+    development wants them on -- so before this, doing what the README
+    says failed three tests, and CI never noticed because a CI checkout
+    has no .env. Asserting the mechanism directly, since the tests it
+    protects fail in a way that looks like a code bug rather than a
+    configuration leak."""
+    import app.config
+
+    assert app.config._ENV_FILE is None
+    # And the knob genuinely selects a file when one is asked for, so this
+    # can't pass by the variable having been quietly removed.
+    monkeypatch.setenv("LINGUA_ENV_FILE", ".env")
+    assert (os.getenv("LINGUA_ENV_FILE") or None) == ".env"
 
 
 def test_disabling_docs_removes_the_schema_too():
