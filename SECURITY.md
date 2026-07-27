@@ -299,6 +299,22 @@ this version) to avoid this exact leak. This is a genuine trade-off
 (clearer registration error vs. zero enumeration surface) rather than an
 unambiguous bug — noted as a recommendation to consider, not fixed here.
 
+**Finding (Medium), fixed in v0.1.16: `/auth/request-password-reset`
+became an enumeration oracle whenever the mail server was down.** The
+endpoint answers identically for known and unknown addresses, which is
+the whole reason it exists in that shape — but only the *known* branch
+sends mail, and the send was unguarded. So with SMTP refusing
+connections, an unregistered address returned 200 and a registered one
+returned 500, measured. The control held in every condition except the
+one where an attacker would most like it not to.
+
+Recorded as Medium rather than Low because it defeats a control this
+document claims, and does so silently: nothing in the app's own
+behaviour changes until the day the mail server goes down. Fixed by
+handling the failure and logging it instead of propagating it —
+`tests/test_email_delivery.py` now asserts that both branches return the
+same status *and* the same body with a dead mail server.
+
 ## A08: Software and Data Integrity Failures
 
 **Checked:** no `pickle`/`eval`/dynamic code loading, no auto-update

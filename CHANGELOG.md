@@ -11,6 +11,60 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.16] — What happens when the mail server is down
+
+All three of this app's email sends run *after* their database work has
+committed, and none of them handled a failure. Today that is invisible,
+because `MockEmailService` cannot fail. The day real SMTP credentials go
+in, it stops being invisible.
+
+### Fixed
+
+- **Registration reported failure for an account it had just created
+  successfully.** The user row is committed, then the verification email
+  is sent. A refused SMTP connection propagated, the endpoint answered
+  500, and the account existed anyway — so the person's obvious next
+  move, registering again, answered "Username or email is already
+  registered". The account was fine and even loginable; nothing on
+  screen said so. Registration now logs the send failure and returns 201,
+  which is the truth: verification isn't enforced (v0.1.12), and
+  `/progress` already shows verification status with a resend button.
+
+- **A mail outage turned password reset into the account-existence
+  oracle it is written not to be.** `/auth/request-password-reset`
+  returns one generic message either way, on purpose (`SECURITY.md`,
+  A01/A07) — but only the registered branch sends mail. With SMTP down,
+  measured: unregistered → 200, registered → 500. The anti-enumeration
+  property held in every condition except a degraded one, which is the
+  condition it most needed to hold in. The send failure is now swallowed
+  and logged; the caller gets the same generic 200 either way.
+
+- **A failed resend left the learner worse off than not clicking.**
+  `/auth/resend-verification` retired the outstanding link *before*
+  minting and sending the replacement, so a failed send meant: old link
+  dead, new link never delivered, and a 500 that explained none of it.
+  The outstanding links are now retired only after the replacement has
+  actually gone out. On failure the previous link still works and the
+  endpoint answers 503 — here, unlike registration, sending the mail is
+  the entire point of the call, so claiming success would be a lie, and
+  the caller is authenticated so an honest error tells them nothing they
+  don't already know.
+
+  The undelivered token stays in the table until it expires. That is
+  acceptable rather than sloppy: its raw value was never written
+  anywhere and left the process with the failed send, so nobody can
+  present it. `test_the_undelivered_token_is_never_usable` says so.
+
+### Added
+
+- **`tests/test_email_delivery.py`** (6 tests) — a `BrokenEmailService`
+  raising `OSError` specifically, since that is *not* an
+  `smtplib` exception: the handler has to be broad enough for what the
+  network layer raises, not just what the mail library defines. The
+  breadth of that `except` is deliberate and follows
+  `translation_cache.py`'s reasoning — connection refused, timeout,
+  protocol error and TLS failure all have the same correct answer here.
+
 ## [0.1.15] — Following the setup instructions broke the tests
 
 Found while re-running the suite mid-session: three tests started failing

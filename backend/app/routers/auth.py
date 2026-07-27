@@ -90,6 +90,47 @@ def _issue_tokens(user: User, session: Session) -> Token:
     return Token(access_token=access_token, refresh_token=raw_refresh)
 
 
+def _send_or_log(
+    email_service: EmailService,
+    *,
+    to: str,
+    subject: str,
+    body: str,
+    purpose: str,
+    user_id: int,
+) -> bool:
+    """Sends mail, reporting failure instead of raising (v0.1.15).
+
+    Every send in this module used to propagate, and all three of them run
+    *after* the database work has already been committed. A refused SMTP
+    connection therefore produced a 500 describing an operation that had
+    in fact succeeded: registration created a working account and told the
+    person it had failed, and their obvious next move -- register again --
+    answered "Username or email is already registered".
+
+    The password-reset caller had a second problem on top of that one.
+    That endpoint answers identically for known and unknown addresses on
+    purpose, so it can't be used to test whether an account exists
+    (SECURITY.md, A01) -- but only the known-address branch sends mail, so
+    while the mail server was down the two branches answered 500 and 200.
+    An outage turned the endpoint into exactly the oracle it is written to
+    avoid being.
+
+    `except Exception` is deliberate and matches translation_cache.py's
+    reasoning: a mail send fails with OSError, smtplib.SMTPException,
+    socket.timeout, or an ssl error depending on how it fails, and every
+    one of them has the same correct answer here. Logging the user id
+    rather than the address keeps the audit trail useful without copying
+    email addresses into it.
+    """
+    try:
+        email_service.send(to=to, subject=subject, body=body)
+        return True
+    except Exception:
+        log_event("email_send_failed", purpose=purpose, user_id=user_id)
+        return False
+
+
 def _create_auth_token(user_id: int, purpose: str, ttl: timedelta, session: Session) -> str:
     raw = generate_token()
     session.add(
@@ -142,10 +183,18 @@ def register(
         user.id, "email_verification", timedelta(hours=VERIFICATION_TOKEN_HOURS), session
     )
     verify_link = f"{settings.frontend_base_url}/verify-email?token={raw_token}"
-    email_service.send(
+    # Not fatal: the account exists and works, and verification is not
+    # enforced anywhere (v0.1.12). Failing the request here would throw
+    # away a perfectly good registration over an undelivered courtesy
+    # email. The learner is not left stranded either -- /progress shows
+    # their verification status and offers a resend.
+    _send_or_log(
+        email_service,
         to=user.email,
         subject="Verify your Lingua account",
         body=f"Welcome to Lingua! Verify your email: {verify_link}",
+        purpose="email_verification",
+        user_id=user.id,
     )
 
     log_event("user_registered", user_id=user.id, username=user.username)
@@ -396,7 +445,12 @@ def resend_verification(
         verification_resend_rate_limiter, str(current_user.id), "resend_verification"
     )
 
-    # Retire any link still outstanding, so exactly one works at a time.
+    # Snapshot the links currently outstanding *before* minting the new
+    # one, so they can be retired afterwards -- exactly one link works at
+    # a time, but only once the replacement has actually been delivered
+    # (v0.1.15). Retiring first meant a failed send left the learner
+    # strictly worse off than before they clicked: previous link dead, new
+    # one never sent, and a 500 that explained none of it.
     outstanding = session.exec(
         select(AuthToken).where(
             AuthToken.user_id == current_user.id,
@@ -404,21 +458,39 @@ def resend_verification(
             AuthToken.used_at.is_(None),
         )
     ).all()
-    now = datetime.now(timezone.utc)
-    for token in outstanding:
-        token.used_at = now
-        session.add(token)
-    session.commit()
 
     raw_token = _create_auth_token(
         current_user.id, "email_verification", timedelta(hours=VERIFICATION_TOKEN_HOURS), session
     )
     verify_link = f"{settings.frontend_base_url}/verify-email?token={raw_token}"
-    email_service.send(
+    delivered = _send_or_log(
+        email_service,
         to=current_user.email,
         subject="Verify your Lingua account",
         body=f"Verify your email: {verify_link}",
+        purpose="email_verification",
+        user_id=current_user.id,
     )
+
+    if not delivered:
+        # Unlike registration, sending the mail *is* what this endpoint was
+        # called to do, so saying "sent" would be a lie. Reporting the
+        # failure honestly gives away nothing: the caller is authenticated
+        # and is only being told about their own account.
+        #
+        # The undelivered token stays in the table until it expires. It is
+        # inert -- its raw value was never written anywhere and left this
+        # process with the failed send -- so nobody can present it.
+        raise HTTPException(
+            status_code=503,
+            detail="Couldn't send the verification email just now. Please try again shortly.",
+        )
+
+    now = datetime.now(timezone.utc)
+    for token in outstanding:
+        token.used_at = now
+        session.add(token)
+    session.commit()
 
     log_event("verification_email_resent", user_id=current_user.id)
     return MessageResponse(message="Verification email sent.")
@@ -447,10 +519,18 @@ def request_password_reset(
         user.id, "password_reset", timedelta(minutes=PASSWORD_RESET_TOKEN_MINUTES), session
     )
     reset_link = f"{settings.frontend_base_url}/reset-password?token={raw_token}"
-    email_service.send(
+    # Failure is swallowed on purpose (v0.1.15): this branch has to be
+    # indistinguishable from the unknown-address branch above, and a 500
+    # here would have distinguished them perfectly. The failure is logged,
+    # which is where it belongs -- a mail outage is an operator's problem,
+    # not a signal to hand the caller.
+    _send_or_log(
+        email_service,
         to=user.email,
         subject="Reset your Lingua password",
         body=f"Reset your password: {reset_link} (expires in {PASSWORD_RESET_TOKEN_MINUTES} minutes)",
+        purpose="password_reset",
+        user_id=user.id,
     )
     log_event("password_reset_requested", user_id=user.id)
     return generic_response
