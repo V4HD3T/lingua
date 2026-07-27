@@ -230,6 +230,53 @@ tree), and Vite was upgraded 5 -> 8 (pulling a patched `esbuild`). Both
 audits now pass clean; the workflow gate exists to catch the *next*
 disclosure.
 
+**The gate caught the next disclosure (v0.1.22).** Worth recording
+because it is the case the workflow was built for and the first time it
+actually fired: the scan went red on a commit whose dependency tree had
+not changed at all — the lockfile diff across the seven preceding
+versions is two lines, both the project's own version string. Three
+advisories were published against dependencies that were already there.
+
+- **`brace-expansion` DoS (High, `GHSA-mh99-v99m-4gvg`) — fixed.**
+  Reached through `vite-plugin-pwa → workbox-build → glob → minimatch`,
+  and separately through `…→ ejs → jake → filelist → minimatch`. npm's
+  own remedy was to *downgrade* `vite-plugin-pwa` to 1.2.0, a breaking
+  change, because 1.3.0 is the latest release and still carries the
+  vulnerable tree. Resolved instead with an `overrides` entry pinning
+  `brace-expansion` to the patched 5.0.8 across the tree, which keeps the
+  plugin current. Verified rather than assumed: the PWA build still
+  generates its service worker with the same 15 precache entries, and all
+  80 frontend tests pass.
+
+  Reachability, stated plainly: this is build-time tooling. The patterns
+  fed to it come from our own Vite config, not from a request, so it was
+  never exposed to an attacker against the deployed app. It was fixed
+  because the fix was clean and the policy says High fails the build —
+  not because the app was at risk.
+
+- **Two React Router advisories (Moderate) — assessed, deferred.**
+  `GHSA-wrjc-x8rr-h8h6` (open redirect via a backslash in `<Link>` /
+  `useNavigate`) and `GHSA-337j-9hxr-rhxg` (constructor injection in
+  `deserializeErrors()` during SSR hydration). The advisory range covers
+  every 6.x release, so the fix is a 7.x major upgrade.
+
+  Neither is reachable here, checked against the code rather than
+  assumed. Every `navigate()` call in the app passes the literal `"/"`,
+  the only `<Navigate>` targets `"/login"`, and every `<Link>` target is
+  either a literal path or an id interpolated *after* a literal prefix
+  (`` `/lessons/${lessonId}` ``) — a `useParams` value is
+  attacker-influenced, but it lands mid-path, and the open-redirect
+  pattern needs the target to *begin* with the backslashes to be read as
+  protocol-relative. The second advisory needs SSR hydration; this is a
+  Vite SPA on `BrowserRouter` with no `hydrateRoot`, `StaticRouter` or
+  `renderToString` anywhere in the tree.
+
+  Deferred rather than rushed: a major router upgrade is real migration
+  work, and doing it under time pressure for two advisories that cannot
+  fire here is how a routing regression gets shipped. Tracked as work,
+  not as an accepted permanent risk — and the `--audit-level=high` gate
+  means these stay visible in every scan without blocking pushes.
+
 ## A07: Identification and Authentication Failures
 
 **Fixed this version:** rate limiting on `/auth/login` (5/min),

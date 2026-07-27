@@ -1,6 +1,6 @@
 # Backend — AI Translation and Language Learning Platform
 
-**Version:** 0.1.21
+**Version:** 0.1.22
 
 A REST API written with FastAPI + SQLModel. Includes authentication,
 real-time translation with automatic language detection, course/lesson/
@@ -11,7 +11,7 @@ tracking.
 > changelog habit stopped rather than where the work did. Everything from
 > 0.0.8 onward is in the root **[CHANGELOG.md](../CHANGELOG.md)** — the
 > single history, rather than two that disagree. The header above tracks
-> the real version (v0.1.21).
+> the real version (v0.1.22).
 
 ## What's new in 0.0.7
 

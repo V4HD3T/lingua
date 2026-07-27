@@ -11,6 +11,62 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.22] — The dependency gate fires for the first time
+
+Pushing v0.1.15–v0.1.21 turned the security scan red on a dependency tree
+that had not changed: the lockfile diff across all seven versions is two
+lines, both this project's own version string. Three advisories had been
+published in the meantime against packages that were already there.
+
+That is the scan doing precisely what `security-scan.yml`'s comment says
+it is for — "a dependency that was clean when last pushed can still grow
+a newly-disclosed vulnerability with no code change on our side at all" —
+and this is the first time it has actually happened.
+
+### Fixed
+
+- **`brace-expansion` DoS (High, `GHSA-mh99-v99m-4gvg`).** Reached twice
+  over through `vite-plugin-pwa → workbox-build`, via both `glob` and
+  `ejs → jake → filelist`. npm's own remedy was to *downgrade*
+  `vite-plugin-pwa` to 1.2.0 — a breaking change — because 1.3.0 is the
+  current release and still ships the vulnerable tree.
+
+  Resolved with an `overrides` entry pinning `brace-expansion` to the
+  patched 5.0.8 instead, which keeps the plugin current. That override
+  crosses a major version for one of the two consumers, so it was
+  verified rather than assumed: the PWA build still emits its service
+  worker with the same 15 precache entries, and all 80 frontend tests
+  pass.
+
+  Reachability, stated plainly: this is build-time tooling, fed patterns
+  from our own Vite config rather than from any request. It was never
+  exposed to an attacker against the deployed app. Fixed because the fix
+  was clean and the policy says High fails the build — not because the
+  app was at risk.
+
+### Assessed and deferred
+
+- **Two React Router advisories (Moderate).** `GHSA-wrjc-x8rr-h8h6`
+  (open redirect via a backslash in `<Link>` / `useNavigate`) and
+  `GHSA-337j-9hxr-rhxg` (constructor injection in `deserializeErrors()`
+  during SSR hydration). The advisory range covers every 6.x release, so
+  the remedy is a 7.x major upgrade.
+
+  Neither can fire here, checked against the code rather than waved off.
+  Every `navigate()` call passes the literal `"/"`, the only `<Navigate>`
+  targets `"/login"`, and every `<Link>` target is a literal path or an
+  id interpolated *after* a literal prefix — a `useParams` value is
+  attacker-influenced, but it lands mid-path, and the open-redirect
+  pattern needs the target to *begin* with the backslashes. The second
+  needs SSR hydration; this is a Vite SPA on `BrowserRouter` with no
+  `hydrateRoot`, `StaticRouter` or `renderToString` anywhere.
+
+  Deferred rather than rushed: a major router upgrade is real migration
+  work, and doing it under time pressure for two advisories that cannot
+  fire is how a routing regression ships. The `--audit-level=high` gate
+  keeps them visible in every scan without blocking pushes. Recorded in
+  `SECURITY.md` as tracked work, not as permanently accepted risk.
+
 ## [0.1.21] — Two ways the app could show a blank page
 
 Both were reachable without anything being broken on the server, and
