@@ -6,6 +6,7 @@ percentage, daily goal progress, and overall quiz/translation statistics.
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.database import get_session
@@ -56,12 +57,19 @@ def _reviews_done_today(user_id: int, session: Session, zone: ZoneInfo) -> int:
     shown against their daily goal, so it has to turn over when their day
     does, not when UTC's does."""
     today = today_in(zone)
+    # Filtered in the database, then dated in Python: which calendar day a
+    # UTC instant belongs to depends on the learner's zone, and that is
+    # not a question SQL can answer portably. Only rows that were
+    # reviewed at all come back -- one per word the learner has ever
+    # started, which is bounded by the vocabulary catalogue rather than by
+    # how long they have used the app.
     reviewed = session.exec(
         select(VocabularyProgress.last_reviewed_at).where(
-            VocabularyProgress.user_id == user_id
+            VocabularyProgress.user_id == user_id,
+            VocabularyProgress.last_reviewed_at.is_not(None),
         )
     ).all()
-    return sum(1 for t in reviewed if t is not None and local_date(t, zone) == today)
+    return sum(1 for t in reviewed if local_date(t, zone) == today)
 
 
 @router.get("/users/me/stats", response_model=UserStats)
@@ -73,21 +81,22 @@ def get_my_stats(
     activity_dates = get_activity_dates(current_user.id, session, zone)
     current_streak, longest_streak = compute_streaks(activity_dates, today_in(zone))
 
-    total_translations = len(
-        session.exec(
-            select(TranslationHistory.id).where(TranslationHistory.user_id == current_user.id)
-        ).all()
-    )
+    # Counted and averaged in the database (v0.1.19). These used to fetch
+    # every matching row so Python could measure the list -- a page view
+    # that got linearly slower for the learners who used the app most.
+    total_translations = session.exec(
+        select(func.count(TranslationHistory.id)).where(
+            TranslationHistory.user_id == current_user.id
+        )
+    ).one()
 
-    attempts = session.exec(
-        select(QuizAttempt).where(QuizAttempt.user_id == current_user.id)
-    ).all()
-    total_quiz_attempts = len(attempts)
-    average_quiz_score = (
-        round(sum(a.score for a in attempts) / total_quiz_attempts, 1)
-        if total_quiz_attempts
-        else 0.0
-    )
+    total_quiz_attempts, average_score = session.exec(
+        select(func.count(QuizAttempt.id), func.avg(QuizAttempt.score)).where(
+            QuizAttempt.user_id == current_user.id
+        )
+    ).one()
+    # avg() is NULL over an empty set, not 0.
+    average_quiz_score = round(average_score, 1) if average_score is not None else 0.0
 
     courses = session.exec(select(Course)).all()
     course_progress = [_compute_course_progress(current_user.id, c, session) for c in courses]

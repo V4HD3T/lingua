@@ -28,6 +28,22 @@ from app.models import TranslationHistory, VocabularyItem, VocabularyProgress
 _WORD_PATTERN = re.compile(r"[^\W\d_]+", re.UNICODE)
 MIN_WORD_LENGTH = 3
 
+# How many of the learner's most recent translations to count words over
+# (v0.1.19).
+#
+# Previously this read the entire history and word-counted all of it,
+# every time /progress loaded -- 230 ms at 20k records, and rising for
+# exactly the learners who use the app most.
+#
+# The bound is not only about cost. This feature exists to surface what
+# someone is looking up *now*, and an unbounded count is dominated by
+# whatever they were working on a year ago: a word looked up five times
+# last spring outranks one looked up three times this week, forever.
+# Recent history is both cheaper and the better signal, so this is a
+# deliberate behaviour change rather than an optimisation that happens to
+# preserve the old answer.
+RECENT_HISTORY_LIMIT = 1000
+
 
 @dataclass
 class VocabularySuggestion:
@@ -62,7 +78,10 @@ def get_personalized_suggestions(
     user_id: int, session: Session, min_frequency: int = 2, limit: int = 10
 ) -> list[VocabularySuggestion]:
     history = session.exec(
-        select(TranslationHistory).where(TranslationHistory.user_id == user_id)
+        select(TranslationHistory)
+        .where(TranslationHistory.user_id == user_id)
+        .order_by(TranslationHistory.created_at.desc())
+        .limit(RECENT_HISTORY_LIMIT)
     ).all()
     if not history:
         return []

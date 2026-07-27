@@ -11,6 +11,75 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.19] — Counting by fetching everything and measuring the list
+
+`check_and_award` runs at the end of every translation, quiz submission
+and review. Its own docstring called it "deliberately cheap: a handful of
+count queries". It was neither cheap nor counting.
+
+### Fixed
+
+- **Counts happen in the database.** Every count in this path was
+  `len(session.exec(select(X.id)).all())` — fetch every matching row into
+  Python, then measure the list. Now `COUNT(*)`, and `EXISTS` (via
+  `LIMIT 1`) for the two "has this ever happened" checks, which were
+  reading a learner's entire quiz history to answer "have they taken
+  one".
+
+- **A criterion is only evaluated for a badge the learner doesn't already
+  hold.** This is where most of the saving is, and it follows from
+  something already true: badges are permanent, so a criterion behind one
+  already earned cannot change the answer. After the first week of use
+  most badges are held — which is exactly when the account's history is
+  large enough for the queries to hurt. A learner holding every badge now
+  performs *one* query here instead of five.
+
+- **Vocabulary suggestions read a bounded slice of history.** The word
+  frequency count loaded every translation the learner had ever made,
+  on every `/progress` load. The bound is not only about cost: this
+  feature exists to surface what someone is looking up *now*, and an
+  unbounded count is dominated by whatever they were working on a year
+  ago — a word looked up five times last spring outranking one looked up
+  three times this week, permanently. Deliberate behaviour change, not an
+  optimisation that happens to preserve the old answer.
+
+- **`reviews_today` filters `last_reviewed_at IS NOT NULL` in SQL**
+  rather than fetching every row and discarding the nulls in Python.
+
+Measured the same way as before — one learner, 20,000 history rows:
+
+| Endpoint | Before | After |
+| --- | --- | --- |
+| `/translate` | 60.3 ms (11x) | **4.3 ms (flat)** |
+| `/users/me/vocabulary-suggestions` | 230.0 ms | **14.0 ms** |
+| `/users/me/stats` | 59.4 ms (15x) | 40.1 ms (10.3x) |
+
+### Corrected
+
+- **`/users/me/stats` still scales with usage, and both places that said
+  otherwise now say so.** The residue is the streak, which reads every
+  activity timestamp the account has — ~40 ms at 20k records.
+  `services/streaks.py` called this "negligible at this scale" and
+  `ARCHITECTURE.md` said the same; true when written, quietly false
+  since. The scale moved and the sentence didn't.
+
+  Kept rather than fixed, on purpose: `longest_streak` genuinely needs
+  the whole history, and a stored counter would trade a bounded, honest
+  cost for a number that can silently disagree with the records it
+  claims to summarise — which is the exact failure the computed design
+  was chosen to avoid. Both docs now carry the measurement and the
+  reasoning instead of the reassurance.
+
+### Added
+
+- **`tests/test_hot_path_scaling.py`** (4 tests). `/translate` is
+  asserted flat; `/users/me/stats` is asserted against an absolute
+  ceiling rather than a ratio, precisely because the design does not
+  offer flatness there and a test claiming otherwise would be the same
+  kind of comfortable falsehood this version is correcting. One test
+  asserts the mechanism directly: a learner holding every badge must not
+  be slower than one still earning them.
+
 ## [0.1.18] — The message said nothing; the clock said everything
 
 `/auth/login` answers "Incorrect username or password" and never which of

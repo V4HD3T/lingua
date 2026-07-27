@@ -6,14 +6,32 @@ table of badge *definitions*, only of who has *earned* which one
 (app.models.Achievement).
 
 check_and_award() is called at the end of the actions that could unlock a
-badge (translate, quiz submit, review submit) and is deliberately cheap:
-a handful of count queries, then a plain Python comparison against each
-badge's threshold. It only ever adds new Achievement rows, never removes
-them, and re-checking an already-earned badge is a harmless no-op.
+badge (translate, quiz submit, review submit). It only ever adds new
+Achievement rows, never removes them.
+
+It used to describe itself as "deliberately cheap: a handful of count
+queries". It wasn't (v0.1.19). The counts were `len(session.exec(
+select(X.id)).all())` -- every matching row fetched into Python so the
+list could be measured -- and the streak criteria recomputed the whole
+streak from every timestamp the learner had ever produced. On the hot
+path, on every single translation. At 20k history rows that put
+/translate at 60 ms against 5 ms, and it grows with the account.
+
+Two changes, both of which lean on badges being permanent:
+
+1. Counting happens in the database (COUNT(*), EXISTS), not by measuring
+   a materialised list.
+2. A criterion is only evaluated for a badge the learner does not
+   already hold. A badge already earned cannot be un-earned, so its
+   criterion cannot change the answer -- and after the first week of use
+   most of them are earned, which is exactly when the history is large
+   enough for the queries to matter. A learner holding every badge
+   performs one query here, not five.
 """
 
 from dataclasses import dataclass
 
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.models import Achievement, QuizAttempt, TranslationHistory, User, VocabularyProgress
@@ -40,47 +58,80 @@ ACHIEVEMENT_CATALOGUE: list[AchievementDefinition] = [
 ]
 
 _CATALOGUE_BY_CODE = {a.code: a for a in ACHIEVEMENT_CATALOGUE}
+_ALL_CODES = frozenset(_CATALOGUE_BY_CODE)
+
+# Grouped by the query each group needs, so a group whose badges are all
+# already earned costs nothing at all.
+_TRANSLATION_THRESHOLDS = {
+    "first_translation": 1,
+    "ten_translations": 10,
+    "hundred_translations": 100,
+}
+_WORDS_STARTED_THRESHOLDS = {"five_words_started": 5}
+_STREAK_THRESHOLDS = {"three_day_streak": 3, "week_streak": 7}
 
 
-def _earned_codes_now(user: User, session: Session) -> set[str]:
+def _count(session: Session, column, *conditions) -> int:
+    """COUNT(*) in the database instead of fetching every row to len() the
+    list it comes back in."""
+    return session.exec(select(func.count(column)).where(*conditions)).one()
+
+
+def _exists(session: Session, column, *conditions) -> bool:
+    """Whether any row matches. LIMIT 1, so "has this learner ever taken a
+    quiz" doesn't read their entire attempt history to find out."""
+    return session.exec(select(column).where(*conditions).limit(1)).first() is not None
+
+
+def _newly_earned(user: User, session: Session, already_earned: set[str]) -> set[str]:
+    """Which not-yet-held badges the learner now qualifies for.
+
+    Takes `already_earned` so every criterion behind it can be skipped:
+    badges are permanent, so a criterion for one already held cannot
+    change the answer. See this module's docstring for why that matters
+    on the hot path.
+    """
+    pending = _ALL_CODES - already_earned
+    if not pending:
+        return set()
+
     user_id = user.id
-    translation_count = len(
-        session.exec(
-            select(TranslationHistory.id).where(TranslationHistory.user_id == user_id)
-        ).all()
-    )
-    quiz_attempts = session.exec(
-        select(QuizAttempt).where(QuizAttempt.user_id == user_id)
-    ).all()
-    started_words = len(
-        session.exec(
-            select(VocabularyProgress.id).where(VocabularyProgress.user_id == user_id)
-        ).all()
-    )
-    # Streak badges are counted against the learner's own day, the same as
-    # the streak they see on their progress page (v0.1.9) -- awarding them
-    # on a different calendar than the one displayed would be its own bug.
-    zone = resolve_zone(user.timezone)
-    current_streak, _ = compute_streaks(get_activity_dates(user_id, session, zone), today_in(zone))
+    earned: set[str] = set()
 
-    earned = set()
-    if translation_count >= 1:
-        earned.add("first_translation")
-    if translation_count >= 10:
-        earned.add("ten_translations")
-    if translation_count >= 100:
-        earned.add("hundred_translations")
-    if quiz_attempts:
+    if pending & _TRANSLATION_THRESHOLDS.keys():
+        made = _count(session, TranslationHistory.id, TranslationHistory.user_id == user_id)
+        earned |= {c for c, need in _TRANSLATION_THRESHOLDS.items() if made >= need}
+
+    if pending & _WORDS_STARTED_THRESHOLDS.keys():
+        started = _count(
+            session, VocabularyProgress.id, VocabularyProgress.user_id == user_id
+        )
+        earned |= {c for c, need in _WORDS_STARTED_THRESHOLDS.items() if started >= need}
+
+    if "first_quiz" in pending and _exists(
+        session, QuizAttempt.id, QuizAttempt.user_id == user_id
+    ):
         earned.add("first_quiz")
-    if any(a.score == 100.0 for a in quiz_attempts):
+
+    if "perfect_quiz" in pending and _exists(
+        session, QuizAttempt.id, QuizAttempt.user_id == user_id, QuizAttempt.score == 100.0
+    ):
         earned.add("perfect_quiz")
-    if started_words >= 5:
-        earned.add("five_words_started")
-    if current_streak >= 3:
-        earned.add("three_day_streak")
-    if current_streak >= 7:
-        earned.add("week_streak")
-    return earned
+
+    if pending & _STREAK_THRESHOLDS.keys():
+        # Counted against the learner's own day, the same as the streak
+        # they see on their progress page (v0.1.9) -- awarding a badge on
+        # a different calendar than the one displayed would be its own
+        # bug. This is the expensive criterion (it reads every activity
+        # timestamp the account has), which is why skipping it once both
+        # streak badges are held is the single biggest saving here.
+        zone = resolve_zone(user.timezone)
+        current_streak, _ = compute_streaks(
+            get_activity_dates(user_id, session, zone), today_in(zone)
+        )
+        earned |= {c for c, need in _STREAK_THRESHOLDS.items() if current_streak >= need}
+
+    return earned & pending
 
 
 def check_and_award(
@@ -99,7 +150,7 @@ def check_and_award(
         for a in session.exec(select(Achievement).where(Achievement.user_id == user_id)).all()
     }
 
-    newly_earned_codes = _earned_codes_now(user, session) - already_earned
+    newly_earned_codes = _newly_earned(user, session, already_earned)
     if not newly_earned_codes:
         return []
 

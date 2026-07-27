@@ -11,8 +11,22 @@ Rather than keeping a separate "streak counter" table, the streak is
 computed directly from the dates on existing TranslationHistory and
 QuizAttempt records. This removes any risk of the counter drifting out of
 sync with real activity (e.g. if a record is deleted, the counter is still
-automatically correct) — the cost is a light computation on every request,
-which is negligible at this scale.
+automatically correct).
+
+The cost, measured rather than assumed (v0.1.19): this reads every
+activity timestamp the account has, so it grows with the account. At
+20,000 history rows it is about 40 ms, and it is the reason
+`/users/me/stats` still scales with usage after that version removed the
+rest of the per-request work there. The docstring here used to call it
+"negligible at this scale", which was true when written and stopped being
+true without anyone noticing — the scale moved, the sentence didn't.
+
+Kept anyway, deliberately: `longest_streak` genuinely needs the whole
+history, and a stored counter would trade a bounded, honest cost for a
+value that can silently disagree with the records it claims to summarise.
+If this ever needs to be faster, the answer is a materialised
+per-(user, day) activity row maintained alongside the writes -- not a
+counter, which is the thing this design exists to avoid.
 """
 
 from datetime import date, timedelta

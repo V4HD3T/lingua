@@ -133,7 +133,13 @@ this environment)
   percentage.
 - The streak is **not** stored in a separate counter table — it's computed
   directly from the dates on `TranslationHistory` and `QuizAttempt`
-  records, so it can never drift out of sync with real activity.
+  records, so it can never drift out of sync with real activity. Measured
+  cost (v0.1.19): it reads every activity timestamp the account has, ~40 ms
+  at 20,000 records, and is why `/users/me/stats` still scales with usage
+  after that version removed the rest of the per-request work. Kept
+  deliberately — `longest_streak` needs the whole history, and a counter
+  would trade a bounded, honest cost for a number that can silently
+  disagree with the records it summarises.
 - A lesson counts as "completed" once its quiz has been attempted at least
   once.
 - The streak calculation (the trickiest part — today/yesterday/gap
