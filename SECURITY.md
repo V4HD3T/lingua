@@ -147,9 +147,27 @@ drop-in change.
 **Checked:** every database access in the codebase (`grep` for raw
 `execute(`, f-string SQL, or string-formatted queries — none found).
 
-**Finding:** none. All queries go through SQLModel/SQLAlchemy's
+**Finding:** none in SQL. All queries go through SQLModel/SQLAlchemy's
 parameterized query builder (`select(...).where(...)`); there is no raw
 SQL string concatenation anywhere in this codebase.
+
+**Finding (Low), fixed in v0.1.17: the Redis cache key was built by
+string concatenation from unvalidated input.** SQL was checked here;
+the *other* place this codebase composes a string out of user input was
+not. `/translate` accepted arbitrary unbounded `source_lang` /
+`target_lang` values — the only user-supplied fields in the app with no
+constraint on them — and the cache key is
+`translation:v{version}:{backend}:{source}:{target}:{digest}`,
+colon-joined with no escaping. Two consequences, both verified:
+`("a", "b:c")` and `("a:b", "c")` resolve to the same key, and a caller
+could mint unlimited distinct keys in the shared cache. A 500-character
+"language code" was also stored verbatim in `TranslationHistory`.
+
+Fixed at the edge rather than by escaping the key: the codes are now
+validated against the set the translation engine actually supports, so a
+code cannot contain the separator in the first place. The same check
+stops unrecognised codes reaching the NLLB tokenizer once the real model
+is switched on.
 
 ## A04: Insecure Design
 

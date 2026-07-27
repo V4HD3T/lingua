@@ -11,6 +11,48 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.17] — The one field nothing checked
+
+Every user-supplied value in this app is bounded and validated —
+passwords, usernames, translation text (2000), timezone, daily goal,
+review quality. `/translate`'s two language codes were the exception:
+plain `str`, no length, no membership check.
+
+### Fixed
+
+- **`source_lang` / `target_lang` are validated against the languages the
+  engine actually supports.** They reached further than their size
+  suggests. Written verbatim into `TranslationHistory`, so a
+  500-character "code" was stored as one. Interpolated into the Redis
+  cache key — `...:{source}:{target}:{digest}`, colon-joined without
+  escaping — so a caller could mint unlimited distinct keys in the shared
+  cache, and `("a", "b:c")` collided with `("a:b", "c")`, verified. And
+  once the real model is active,
+  `NLLB_LANGUAGE_CODES.get(code, code)` hands anything unrecognised
+  straight to the tokenizer.
+
+  Validating at the edge closes all three at once, which is why it beats
+  escaping the cache key: the stored value is bounded, the keyspace is
+  bounded, the key is unambiguous *because* a valid code cannot contain a
+  colon, and the tokenizer only ever sees codes the engine knows.
+
+  `NLLB_LANGUAGE_CODES` is the authority rather than the `Language`
+  table, because the two answer different questions. The table is the UI
+  catalogue the dropdowns are built from (five seeded rows, admin
+  extensible); the constant is what the engine can handle, and it is a
+  superset of everything that legitimately arrives — the dropdown's
+  codes, and everything `detect_language` can return, since that
+  classifier is restricted to exactly this set.
+
+### Added
+
+- **`tests/test_language_codes.py`** (9 tests). Two are containment
+  contracts rather than input checks, because that is where this can
+  regress next: the `Language` catalogue must stay a subset of what
+  translate accepts (otherwise the dropdown offers a language that 422s),
+  and the detector's output set must too (otherwise auto-detect feeds
+  back a code its own translate call refuses).
+
 ## [0.1.16] — What happens when the mail server is down
 
 All three of this app's email sends run *after* their database work has

@@ -1,6 +1,6 @@
 # Lingua — AI Translation and Language Learning Platform
 
-**Version:** 0.1.16
+**Version:** 0.1.17
 
 A platform offering real-time translation and interactive language
 learning for multilingual users. Built as part of a university graduation
@@ -46,6 +46,7 @@ lives in [CHANGELOG.md](./CHANGELOG.md).
 | 0.1.14 | Page tests for all 13 pages, the layer whose only signal had been that it compiled — and the frontend suite made runnable on Node ≥ 24, where a global `localStorage` had been shadowing jsdom's since before it was noticed. Test counts across the docs now match what runs. |
 | 0.1.15 | The backend suite stopped reading the developer's `.env`: following `backend/README.md`'s own `cp .env.example .env` step failed three tests, and CI (no `.env`) never saw it. |
 | 0.1.16 | Mail-server failures handled: registration no longer reports failure for an account it created, a failed resend no longer kills the link it was replacing, and a mail outage no longer turns password reset into the account-existence oracle it's written not to be. |
+| 0.1.17 | `/translate`'s language codes were the one user field with no validation — unbounded, stored verbatim, and colon-joined into the shared Redis cache key where two different pairs could collide. Validated against what the engine supports. |
 
 ## Quick start
 

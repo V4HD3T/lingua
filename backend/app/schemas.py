@@ -1,13 +1,27 @@
 from datetime import date, datetime
 from typing import Dict, Generic, List, Optional, TypeVar
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from app.services.translation_service import NLLB_LANGUAGE_CODES
 
 
 # Well past any real passphrase, including a long one from a password
 # manager (v0.1.11). Not a bcrypt limit -- bcrypt_sha256 removed that --
 # just a ceiling so an unbounded string can't be sent to be hashed.
 MAX_PASSWORD_LENGTH = 256
+
+# The languages this app can actually translate between (v0.1.17).
+#
+# NLLB_LANGUAGE_CODES is the authority here rather than the Language
+# table, because the two answer different questions. The table is the UI
+# catalogue the language dropdowns are built from -- five seeded rows,
+# extensible by an admin. This is what the translation engine can
+# genuinely handle, and it is a superset of everything that legitimately
+# reaches this endpoint: the dropdown's codes, and everything
+# `detect_language` can return, since that classifier is restricted to
+# exactly this set (see services/language_detection.py).
+SUPPORTED_LANGUAGE_CODES = frozenset(NLLB_LANGUAGE_CODES)
 
 
 class UserCreate(BaseModel):
@@ -77,8 +91,37 @@ class AchievementRead(BaseModel):
 
 class TranslateRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
-    source_lang: str
-    target_lang: str
+    source_lang: str = Field(min_length=2, max_length=16)
+    target_lang: str = Field(min_length=2, max_length=16)
+
+    @field_validator("source_lang", "target_lang")
+    @classmethod
+    def _must_be_a_supported_language(cls, value: str) -> str:
+        """Language codes were the one user-supplied field in this app
+        that nothing checked (v0.1.17) -- unbounded, unvalidated, and
+        further-reaching than they look.
+
+        Three places took them at their word. They are written to
+        `TranslationHistory` verbatim, so a 500-character "code" was
+        stored as one. They are interpolated into the Redis cache key,
+        which is `...:{source}:{target}:{digest}` -- so an attacker could
+        mint unlimited distinct keys in the shared cache, and, because
+        the parts are colon-joined without escaping, ("a", "b:c") and
+        ("a:b", "c") produced *the same key*. And once the real model is
+        active, `NLLB_LANGUAGE_CODES.get(code, code)` hands anything
+        unrecognised straight to the tokenizer.
+
+        Validating at the edge closes all three at once: the stored value
+        is bounded, the cache keyspace is bounded, the key is unambiguous
+        because a valid code cannot contain a colon, and the tokenizer
+        only ever sees codes the engine knows.
+        """
+        if value not in SUPPORTED_LANGUAGE_CODES:
+            raise ValueError(
+                "unsupported language code; supported: "
+                + ", ".join(sorted(SUPPORTED_LANGUAGE_CODES))
+            )
+        return value
 
 
 class IdiomWarning(BaseModel):
