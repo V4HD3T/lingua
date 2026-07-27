@@ -53,6 +53,37 @@ def verify_password(plain_password: str, hashed_password: str) -> tuple[bool, Op
     return pwd_context.verify_and_update(plain_password, hashed_password)
 
 
+def dummy_verify() -> None:
+    """Spends the same work `verify_password` would, for a login attempt
+    against a username that doesn't exist (v0.1.18).
+
+    Without this, `/auth/login` skipped hashing entirely when the lookup
+    found nobody, and bcrypt is deliberately slow: a wrong password for a
+    real account took ~200 ms while a wrong password for an invented one
+    took ~5 ms. Both answer "Incorrect username or password", so the
+    message gives nothing away -- and the clock gave away everything the
+    message was written to hide, 40x over and measurable in a single
+    request.
+
+    passlib provides this exactly for the purpose: it verifies against a
+    hash of a throwaway value, so the cost matches a real verification
+    without any branch depending on the username.
+    """
+    pwd_context.dummy_verify()
+
+
+def warm_password_hasher() -> None:
+    """Builds passlib's dummy hash up front, at startup (see app/main.py).
+
+    It is otherwise constructed on first use, which makes the *first*
+    unknown-username login cost a hash plus a verify -- around twice a
+    real one. That is still a timing signal, merely an inverted one, and
+    it would land on whichever request happened to arrive first after a
+    restart. Doing it once at boot removes the case entirely.
+    """
+    pwd_context.dummy_verify()
+
+
 def create_access_token(subject: str, expires_minutes: Optional[int] = None) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=expires_minutes or settings.access_token_expire_minutes

@@ -11,6 +11,60 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.18] — The message said nothing; the clock said everything
+
+`/auth/login` answers "Incorrect username or password" and never which of
+the two was wrong. `SECURITY.md` cited that as the reason registration's
+enumeration leak was low severity: the other endpoints were "deliberately
+built to avoid this exact leak". That was true of the message and false
+of the response time.
+
+### Fixed
+
+- **Login response times no longer distinguish accounts that exist from
+  ones that don't.** `verify_password` ran only when the username lookup
+  found somebody, and bcrypt is deliberately slow — so a wrong password
+  for a real account took ~200 ms and a wrong password for an invented
+  one took ~5 ms. Measured at **40x**: not a statistical attack needing
+  thousands of samples, but a difference visible in a single request.
+
+  Fixed with passlib's `dummy_verify()`, which spends the same hashing
+  work against a throwaway hash so no branch depends on whether the user
+  was found. Re-measured: **192.5 ms vs 192.6 ms, 1.00x**.
+
+- **The dummy hash is built at startup**, not on first use. passlib
+  constructs it lazily, which would have made the *first* unknown-username
+  login after every restart cost a hash plus a verify — roughly twice a
+  real one. Still a timing signal, merely inverted, landing on whichever
+  request happened to arrive first.
+
+### Decided
+
+- **Registration keeps telling you when a username is taken.** With login
+  and password reset both genuinely closed, the remaining trade-off is
+  between one endpoint leaking and none — and the cost of closing it is
+  paid by every real person signing up, who would have to be told
+  "check your email" instead of "that name is taken". Recorded in
+  `SECURITY.md` as a decision rather than left standing as a
+  recommendation nobody was going to act on.
+
+### Added
+
+- **`tests/test_login_timing.py`** (4 tests). The wall-clock assertion is
+  deliberately loose — a 25% floor against a bug that sat at 2.5%, so it
+  keeps a 10x margin while surviving a noisy CI runner — and it is
+  backed by two deterministic tests asserting the mechanism instead: that
+  the work *is* spent for an unknown username, and that it is *not* spent
+  twice for a real one, which would merely invert the signal.
+
+### Noted
+
+- This is the second time `SECURITY.md` has claimed a protection the code
+  did not have (the first: the bcrypt truncation fix, corrected in
+  v0.1.11). Both claims were true of the part that was easy to look at
+  and false of the part that wasn't. Recorded in place, as this document
+  does with its own errors.
+
 ## [0.1.17] — The one field nothing checked
 
 Every user-supplied value in this app is bounded and validated —

@@ -11,6 +11,7 @@ from app.database import engine, init_db
 from app.middleware import GeneralRateLimitMiddleware, SecurityHeadersMiddleware
 from app.models import Course, Language, Lesson, Quiz, QuizQuestion, VocabularyItem
 from app.routers import achievements, admin, auth, courses, quizzes, review, stats, suggestions, translate
+from app.security import warm_password_hasher
 from app.services.security_logging import log_event
 
 
@@ -164,6 +165,10 @@ async def lifespan(app: FastAPI):
             "api_docs_enabled",
             message="/docs, /redoc and /openapi.json are publicly served (ENABLE_API_DOCS).",
         )
+    # Before the first request, so that an unknown-username login never
+    # pays for building passlib's dummy hash on top of using it -- see
+    # app/security.py: warm_password_hasher.
+    warm_password_hasher()
     init_db()
     with Session(engine) as session:
         seed_data(session)

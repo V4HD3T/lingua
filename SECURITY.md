@@ -33,7 +33,7 @@ filled in from memory.
 | A04 | Insecure Design | ✅ Rate limiting bypassable via `X-Forwarded-For` (v0.1.4) and its attempt table unbounded (v0.1.5), both fixed; 1 non-security design note |
 | A05 | Security Misconfiguration | ✅ CORS wildcard resolved in v0.1.0; `/docs` + `/openapi.json` published unconditionally, fixed in v0.1.10 |
 | A06 | Vulnerable/Outdated Components | ✅ both findings resolved post-v0.0.9 (PyJWT, Vite 8); CI-monitored going forward |
-| A07 | Auth Failures | ✅ A successful login cleared the whole address's brute-force budget (v0.1.6) and refresh-token reuse detection fired on ordinary second tabs (v0.1.8), both fixed; email verification decided as informational rather than enforced (v0.1.12); 1 low (registration enumeration) |
+| A07 | Auth Failures | ✅ Login response times equalised (v0.1.18, they distinguished real accounts 40x over); a successful login cleared the whole address's brute-force budget (v0.1.6) and refresh-token reuse detection fired on ordinary second tabs (v0.1.8), both fixed; email verification decided as informational rather than enforced (v0.1.12); 1 low (registration enumeration) |
 | A08 | Software/Data Integrity Failures | ✅ No issues found |
 | A09 | Logging/Monitoring Failures | ✅ Structured logging added in v0.0.7; its values were forgeable until escaped in v0.1.7 |
 | A10 | Server-Side Request Forgery | ✅ Not applicable to current feature set |
@@ -240,7 +240,8 @@ short-lived (30 min) access tokens instead of the previous 24-hour ones.
 
 **Checked:** password minimum length (8 characters, enforced both ends);
 login's error message is appropriately generic ("Incorrect username or
-password", doesn't reveal which was wrong).
+password", doesn't reveal which was wrong) — and, since v0.1.18, so is
+its response *time* (see the finding below).
 
 **Finding (Medium), fixed in v0.1.11: bcrypt silently truncated
 passwords at 72 bytes — and this document previously claimed otherwise.**
@@ -311,11 +312,35 @@ be made on purpose rather than by drift.
 **Finding (Low): registration allows limited account enumeration.**
 `/auth/register`'s error message ("Username or email is already
 registered") confirms whether a given email already has an account.
-Lower severity than it might sound, since `/auth/login` and
-`/auth/request-password-reset` were both deliberately built (the latter,
-this version) to avoid this exact leak. This is a genuine trade-off
-(clearer registration error vs. zero enumeration surface) rather than an
-unambiguous bug — noted as a recommendation to consider, not fixed here.
+This is a genuine trade-off (a clear registration error vs. zero
+enumeration surface) rather than an unambiguous bug: someone signing up
+has to be told their chosen username is taken, and every alternative —
+"check your email either way" — costs a real person a real amount of
+confusion to close a leak the attacker can approximate anyway.
+
+**Decided in v0.1.18: kept, deliberately, and now stated as a decision
+rather than left as a standing recommendation.** What changed is that
+the other two endpoints genuinely close it, so the trade-off is
+between "one endpoint tells you" and "no endpoint tells you", not
+between one and three.
+
+**Finding (Medium), fixed in v0.1.18: `/auth/login` leaked the same
+information by timing.** The paragraph above used to claim login "was
+deliberately built to avoid this exact leak". That was true of the
+message and false of the clock. `verify_password` ran only when the
+username lookup found somebody, and bcrypt is deliberately slow, so a
+wrong password for a real account took ~200 ms and a wrong password for
+an invented one took ~5 ms — measured at 40x, unmistakable in a single
+request without any statistics.
+
+This is the second time this document has asserted a protection that was
+not in the code (see A07's bcrypt entry, corrected in v0.1.11), and it
+is worth naming the pattern: both claims were true of the part that was
+easy to look at and false of the part that wasn't. Fixed with passlib's
+`dummy_verify()`, which spends the same hashing work for a username that
+does not exist; `tests/test_login_timing.py` measures the result at
+1.00x and also asserts the mechanism directly, since a wall-clock
+assertion alone is a poor guard on a shared runner.
 
 **Finding (Medium), fixed in v0.1.16: `/auth/request-password-reset`
 became an enumeration oracle whenever the mail server was down.** The

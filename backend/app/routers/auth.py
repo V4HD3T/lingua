@@ -22,7 +22,13 @@ from app.schemas import (
     UserCreate,
     UserRead,
 )
-from app.security import create_access_token, decode_access_token, hash_password, verify_password
+from app.security import (
+    create_access_token,
+    decode_access_token,
+    dummy_verify,
+    hash_password,
+    verify_password,
+)
 from app.services.email_service import EmailService, get_email_service
 from app.services.rate_limiter import (
     client_ip as _client_ip,
@@ -218,9 +224,16 @@ def login(
     _rate_limit(login_rate_limiter, key, "login")
 
     user = session.exec(select(User).where(User.username == form_data.username)).first()
-    verified, upgraded_hash = (
-        verify_password(form_data.password, user.hashed_password) if user else (False, None)
-    )
+    if user:
+        verified, upgraded_hash = verify_password(form_data.password, user.hashed_password)
+    else:
+        # Spend the hashing work anyway (v0.1.18). Skipping it made the
+        # response time answer a question the response body deliberately
+        # refuses to: ~200 ms for a real account, ~5 ms for one that
+        # doesn't exist.
+        dummy_verify()
+        verified, upgraded_hash = False, None
+
     if not user or not verified:
         # Charged only on failure, so simply logging in -- however often --
         # never eats into the address budget.
