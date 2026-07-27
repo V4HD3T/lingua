@@ -1,0 +1,45 @@
+.page {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-5);
+  text-align: center;
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  margin-top: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.reload {
+  background: var(--ink-900);
+  color: var(--paper-0);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-5);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.reload:hover {
+  background: var(--ink-600);
+}
+
+.details {
+  margin-top: var(--space-6);
+  text-align: left;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.message {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  margin-top: var(--space-3);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

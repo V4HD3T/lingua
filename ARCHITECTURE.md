@@ -148,7 +148,7 @@ this environment)
   stat tiles, and per-course progress bars. "Progress" link in the NavBar
   (visible when logged in).
 
-Currently **267 backend + 74 frontend tests passing** (the per-version
+Currently **305 backend + 80 frontend tests passing** (the per-version
 counts below are what each version added, not the running total). See
 `TESTING.md` for the full strategy, and `backend/README.md` /
 `frontend/README.md` for setup and run instructions.

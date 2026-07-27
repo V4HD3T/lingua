@@ -1,6 +1,6 @@
 # Lingua — AI Translation and Language Learning Platform
 
-**Version:** 0.1.20
+**Version:** 0.1.21
 
 A platform offering real-time translation and interactive language
 learning for multilingual users. Built as part of a university graduation
@@ -50,6 +50,7 @@ lives in [CHANGELOG.md](./CHANGELOG.md).
 | 0.1.18 | Login took ~200 ms for a real account and ~5 ms for one that doesn't exist — a 40x enumeration oracle behind a message written to reveal nothing. Equalised to 1.00x; registration's remaining leak decided and documented rather than left as a recommendation. |
 | 0.1.19 | The badge check ran on every translation and counted by fetching every row to measure the list: `/translate` 60 ms → 4 ms, suggestions 230 ms → 14 ms. `/users/me/stats` still scales with the streak, and the two docs that called that negligible now carry the measurement. |
 | 0.1.20 | Three tables that only ever grew now get purged — with retention windows set past the point a row can still matter, since deleting a revoked refresh token early turns a session-theft alarm into a silent 401. Request bodies bounded too. |
+| 0.1.21 | Two ways the app showed a blank page, both without anything being broken: an unknown URL matched no route, and one thrown render error unmounted the whole tree. Catch-all route and an error boundary inside the nav. |
 
 ## Quick start
 
@@ -90,7 +91,7 @@ and architecture notes.
 
 ## Status
 
-- ✅ Backend: auth (+ refresh tokens, email verification, password reset, rate limiting, daily goals), translation (+ confidence/alternatives/idiom warnings/language detection), courses/lessons (+ grammar/cultural notes), quizzes (4 types + adaptive difficulty), progress/streak, spaced repetition, personalized suggestions, achievement badges — 267 backend + 74 frontend tests passing
+- ✅ Backend: auth (+ refresh tokens, email verification, password reset, rate limiting, daily goals), translation (+ confidence/alternatives/idiom warnings/language detection), courses/lessons (+ grammar/cultural notes), quizzes (4 types + adaptive difficulty), progress/streak, spaced repetition, personalized suggestions, achievement badges — 305 backend + 80 frontend tests passing
 - ✅ Frontend: a working interface for every flow (React + TypeScript)
 - ✅ Speech: voice input (translation + pronunciation practice) and voice output (translations + vocabulary + listening quiz questions), both browser-based, no model download
 - ✅ Progress tracking: daily streak, daily review goal, per-course completion percentage, achievement badges (`/progress`)

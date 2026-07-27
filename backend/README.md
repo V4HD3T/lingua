@@ -1,11 +1,17 @@
 # Backend — AI Translation and Language Learning Platform
 
-**Version:** 0.0.7
+**Version:** 0.1.21
 
 A REST API written with FastAPI + SQLModel. Includes authentication,
 real-time translation with automatic language detection, course/lesson/
 vocabulary and quiz modules, spaced-repetition review, and progress/streak
 tracking.
+
+> The per-version notes below stop at 0.0.7, which is where this file's
+> changelog habit stopped rather than where the work did. Everything from
+> 0.0.8 onward is in the root **[CHANGELOG.md](../CHANGELOG.md)** — the
+> single history, rather than two that disagree. The header above tracks
+> the real version (v0.1.21).
 
 ## What's new in 0.0.7
 
@@ -105,7 +111,7 @@ data is added (5 languages, 1 course, 1 lesson, 2 vocabulary items, 1 quiz).
 pytest -v
 ```
 
-267 tests; covers authentication (incl. refresh tokens, rate limiting,
+305 tests; covers authentication (incl. refresh tokens, rate limiting,
 verification, password reset), daily goals, translation (anonymous + registered
 user, confidence/alternatives, idiom warnings), language detection,
 lesson/course flows, quizzes, spaced repetition, personalized vocabulary
@@ -202,7 +208,7 @@ app/
     review.py        /users/me/review-queue, /vocabulary/{id}/review (spaced repetition)
     suggestions.py   /users/me/vocabulary-suggestions (personalized, from translation history)
     achievements.py  /users/me/achievements
-tests/               pytest test suite (267 tests)
+tests/               pytest test suite (305 tests)
 ```
 
 ## Authentication flow

@@ -11,6 +11,52 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.21] — Two ways the app could show a blank page
+
+Both were reachable without anything being broken on the server, and
+neither would have produced an error anyone could act on.
+
+### Fixed
+
+- **An unknown address rendered an empty page.** `<Routes>` had no
+  catch-all, so a mistyped URL or a stale bookmark matched nothing: nav
+  bar, then an empty `<main>`. That reads as a page that failed to load
+  rather than one that doesn't exist. `NotFoundPage` says which, and
+  links onward — a dead end is only useful if it points somewhere.
+
+- **One thrown error blanked the whole app.** React unmounts the entire
+  tree on an uncaught render error, deliberately, on the grounds that a
+  half-rendered UI is worse than none. With no boundary above the routes,
+  a single mistake in a single page took the document with it: no
+  message, no navigation, nothing to suggest reloading would help.
+
+  `ErrorBoundary` sits *inside* the router rather than around it, so the
+  nav bar survives — the difference between "this page broke" and "the
+  app broke". It is a class component because `componentDidCatch` and
+  `getDerivedStateFromError` still have no hook equivalents; the one
+  place in this codebase where that isn't a stylistic choice.
+
+  The error message goes behind a `<details>`: reachable to quote in a
+  bug report, not the first thing a learner reads. The component stack
+  goes to the console, since that is the part that actually locates the
+  failure and React hands it only to `componentDidCatch`.
+
+### Changed
+
+- **`email-validator` is pinned** (`==2.3.0`) like every other dependency.
+  It was the one unpinned line, so a fresh install could silently pick up
+  a different major version. Pinned to what this project is actually
+  tested against, checked against the installed version rather than
+  guessed at.
+
+- **`App.tsx`'s route block is indented correctly.** The routes had been
+  sitting to the left of the `<Routes>` that contains them.
+
+### Added
+
+- **`ErrorBoundary.test.tsx`** (4) and **`NotFoundPage.test.tsx`** (2).
+  80 frontend tests total.
+
 ## [0.1.20] — Rows nothing ever deleted, and bodies nothing ever measured
 
 `models.QuizSession`'s docstring said a cleanup job was "noted for later

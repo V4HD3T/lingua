@@ -27,8 +27,8 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - name: Install dependencies
         run: pip install -r requirements.txt
-      # The floor (88%) sits deliberately below the current 93% so a
-      # legitimately hard-to-test addition doesn't block a push, while a
+      # The floor (88%) sits deliberately below the current 94% so a
+      # legitimately hard-to-test addition does not block a push, while a
       # real collapse in coverage still fails loudly. Ratchet it up as
       # coverage grows; never ratchet it down to make a failure pass.
       - name: Run tests with coverage

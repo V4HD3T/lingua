@@ -6,8 +6,8 @@ aspirational.
 
 | Layer | Question it answers | Tooling | Size | Where it runs |
 | --- | --- | --- | --- | --- |
-| Backend unit + integration | Does every endpoint and service behave, including the failure paths? | pytest (+ pytest-cov) | 267 tests, 93% coverage (CI gate: 88%) | `backend/`, every push (CI `backend-tests`) |
-| Frontend unit + page | Do the client pieces behave in isolation, and does each page do the right thing with them? | Vitest + React Testing Library (jsdom) | 74 tests (23 unit, 51 page) | `frontend/src/**/*.test.*`, every push (CI `frontend-build`) |
+| Backend unit + integration | Does every endpoint and service behave, including the failure paths? | pytest (+ pytest-cov) | 305 tests, 94% coverage (CI gate: 88%) | `backend/`, every push (CI `backend-tests`) |
+| Frontend unit + page | Do the client pieces behave in isolation, and does each page do the right thing with them? | Vitest + React Testing Library (jsdom) | 80 tests (29 unit, 51 page) | `frontend/src/**/*.test.*`, every push (CI `frontend-build`) |
 | End-to-end | Do the seams hold — real browser, real backend, full journey? | Playwright (Chromium) | 1 journey spec | `frontend/e2e/`, every push (CI `e2e`) |
 | Load | What happens under pressure — and does the rate limiter actually engage? | Locust | 4 scenarios, 2 modes | `backend/loadtest/`, run manually |
 
@@ -43,8 +43,11 @@ cd frontend && npm test        # or: npm run test:watch
 - **CopyButton** — including the blocked-clipboard failure path.
 - **SentenceOrderInput** — order building, word return, duplicate words
   by position.
+- **ErrorBoundary** — that a thrown render error produces a recoverable
+  message rather than the blank document React's unmount-the-tree
+  behaviour would otherwise leave (v0.1.21).
 
-### Page — all 13 pages, one file each
+### Page — all 14 pages, one file each
 
 Pages were the gap this layer closed (v0.1.14): until then their only
 automated signal was that they compiled. Each page is rendered with the
@@ -74,6 +77,8 @@ What that pins down, page by page:
 - **Courses / Course detail / Lesson detail** — "empty" told apart from
   "failed to load", and the lesson page asking about a quiz through the
   unauthenticated existence check, so browsing never mints a QuizSession.
+- **Not found** — that an unknown address says so and links onward,
+  rather than rendering the empty `<main>` it did before v0.1.21.
 
 Config notes:
 

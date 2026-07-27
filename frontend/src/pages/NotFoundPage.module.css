@@ -1,0 +1,38 @@
+.page {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-5);
+  text-align: center;
+}
+
+.code {
+  display: block;
+  font-size: 56px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-4);
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  margin-top: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  justify-content: center;
+}
+
+.link {
+  color: var(--accent-500);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
