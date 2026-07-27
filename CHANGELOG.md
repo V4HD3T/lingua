@@ -11,6 +11,62 @@ Turkish, then each given an English mirror at the same version number
 directly). New features starting from 0.0.4 are English-only going
 forward, one PATCH version per completed feature/topic.
 
+## [0.1.20] — Rows nothing ever deleted, and bodies nothing ever measured
+
+`models.QuizSession`'s docstring said a cleanup job was "noted for later
+alongside expired-token cleanup". This is that job, plus the request-size
+ceiling the same audit turned up.
+
+### Fixed
+
+- **Three tables only ever grew.** `QuizSession` gains a row every time a
+  logged-in learner opens a quiz — 25 fetches, 25 rows, verified — and a
+  caller can add them as fast as the rate limiter allows. `AuthToken`
+  kept every verification and reset link ever issued. `RefreshToken` kept
+  every session ever revoked. None of it was a leak (the rows hold
+  hashes, and the code already refuses to act on them); it was unbounded
+  storage attached to ordinary use.
+
+  `app/services/maintenance.py` deletes them, at startup by default and
+  via `scripts/purge.py` for deployments that would rather schedule it.
+
+  **The retention windows are the load-bearing part**, because a purge
+  that is too eager doesn't free space, it changes behaviour somewhere
+  else. The one that matters most: `/auth/refresh` treats a *revoked*
+  token being presented as theft and kills every session for that user —
+  but that needs the row to still exist. Delete it early and the replay
+  merely answers "Invalid refresh token": still refused, silently, with
+  no alarm and no audit entry. So refresh tokens are kept for a full
+  token lifetime *past* their own expiry, and a test asserts the
+  relationship rather than the number, since raising
+  `REFRESH_TOKEN_EXPIRE_DAYS` past the retention would otherwise break
+  reuse detection without a word.
+
+- **Request bodies are bounded.** Individual fields were capped by their
+  schemas; the request itself was not, and neither was the one container
+  in it — a 20,000-key `answers` dict in a ~4 MB body was accepted and
+  parsed. `RequestSizeLimitMiddleware` refuses anything over
+  `MAX_REQUEST_BODY_BYTES` (256 KB), and `QuizSubmission.answers` is
+  bounded at 200 entries.
+
+  Stated plainly: the check reads `Content-Length`, which a chunked
+  request can simply omit, so this is a first line and not a guarantee —
+  the guarantee belongs at the proxy in front, and `DEPLOYMENT.md` now
+  says so. It is still worth having: it closes the ordinary case, it
+  travels with the app rather than with one deployment's config, and the
+  Pydantic bound alone cannot help, since validation runs *after* the
+  body has been read and decoded.
+
+### Added
+
+- **`tests/test_maintenance.py`** (8 tests) — mostly about what must
+  *survive*: a live verification link however old its row, a quiz session
+  a learner could still retry, and a just-revoked refresh token whose
+  replay must still be detected as theft rather than shrugged off.
+- **`tests/test_request_size.py`** (6 tests), including that the 413
+  still carries the security headers, and that the largest legitimate
+  translation (2000 multi-byte characters) is nowhere near the ceiling.
+
 ## [0.1.19] — Counting by fetching everything and measuring the list
 
 `check_and_award` runs at the end of every translation, quiz submission

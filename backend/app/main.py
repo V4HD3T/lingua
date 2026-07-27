@@ -8,10 +8,15 @@ from sqlmodel import Session, select
 
 from app.config import settings
 from app.database import engine, init_db
-from app.middleware import GeneralRateLimitMiddleware, SecurityHeadersMiddleware
+from app.middleware import (
+    GeneralRateLimitMiddleware,
+    RequestSizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 from app.models import Course, Language, Lesson, Quiz, QuizQuestion, VocabularyItem
 from app.routers import achievements, admin, auth, courses, quizzes, review, stats, suggestions, translate
 from app.security import warm_password_hasher
+from app.services.maintenance import purge_and_log
 from app.services.security_logging import log_event
 
 
@@ -172,6 +177,13 @@ async def lifespan(app: FastAPI):
     init_db()
     with Session(engine) as session:
         seed_data(session)
+        if settings.purge_on_startup:
+            # Cheap for this app's scale and it means the cleanup actually
+            # happens, rather than depending on someone having wired up a
+            # cron job. A deployment large enough for the delete to delay
+            # startup should turn this off and run scripts/purge.py on a
+            # schedule instead -- see DEPLOYMENT.md.
+            purge_and_log(session)
     yield
 
 
@@ -189,6 +201,10 @@ app = FastAPI(
 # preflight OPTIONS requests are answered by the outermost CORSMiddleware
 # before ever reaching the limiter).
 app.add_middleware(GeneralRateLimitMiddleware)
+# Outside the rate limiter, so an oversized body is refused before any
+# budget is spent on reading it, and inside the header/CORS layers so the
+# 413 still comes back with them attached.
+app.add_middleware(RequestSizeLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,

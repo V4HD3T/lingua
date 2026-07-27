@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=_ENV_FILE, extra="ignore")
 
     app_name: str = "AI Translation and Language Learning Platform"
-    app_version: str = "0.1.19"
+    app_version: str = "0.1.20"
     database_url: str = "sqlite:///./app.db"
 
     secret_key: str = "change-this-for-development"
@@ -132,6 +132,23 @@ class Settings(BaseSettings):
     # burden on remembering, which is exactly how v0.1.4's proxy setting
     # went wrong.
     enable_api_docs: bool = False
+
+    # Delete rows that can no longer affect anything, at startup (v0.1.20)
+    # -- spent auth tokens, long-expired refresh tokens, stale quiz
+    # sessions. See app/services/maintenance.py for the retention windows
+    # and why each is set where it is.
+    #
+    # On by default because the alternative is a cleanup that only runs if
+    # somebody remembers to schedule it, and this app's scale makes the
+    # delete trivial. Turn it off where the delete would delay startup and
+    # run scripts/purge.py on a schedule instead.
+    purge_on_startup: bool = True
+
+    # Largest request body this API will read (v0.1.20). Generous next to
+    # anything it legitimately accepts -- the biggest is admin lesson
+    # content, and a translation caps at 2000 characters -- while still
+    # refusing a body sized to exhaust memory.
+    max_request_body_bytes: int = 262_144  # 256 KB
 
     frontend_base_url: str = "http://localhost:5173"
 

@@ -89,6 +89,37 @@ python scripts/import_content.py          # inside the backend container/service
 Idempotent, so re-running after a redeploy is safe. See
 `backend/README.md` for the pack format.
 
+## Routine cleanup
+
+Three tables only ever grew until v0.1.20: spent verification/reset
+links, refresh tokens long past expiry, and the served-question record
+written every time a logged-in learner opens a quiz. The app now deletes
+them at startup.
+
+```bash
+python scripts/purge.py                   # inside the backend container/service
+```
+
+You need that script only if you set `PURGE_ON_STARTUP=false` — which is
+the right call once the delete is large enough to delay boot. Put it on
+whatever scheduler the platform offers (a cron job, a Railway scheduled
+command) and it does exactly what startup would have.
+
+Safe to run against a live database, and safe to run twice: it only
+removes rows the code already refuses to act on. The retention windows
+live in `app/services/maintenance.py`, each set past the point where the
+row can still affect a decision — in particular, revoked refresh tokens
+are kept long enough that reuse detection still fires on a replay, since
+deleting them early turns a session-theft alarm into a silent 401.
+
+## Request size
+
+`MAX_REQUEST_BODY_BYTES` (256 KB default) refuses oversized bodies. It
+reads `Content-Length`, which a chunked request can omit, so treat it as
+a first line and set the real ceiling at the proxy in front — nginx's
+`client_max_body_size`, or the platform's equivalent. Raise both together
+if you ever add an endpoint that legitimately accepts something large.
+
 ## Secrets management rules
 
 - `.env` files never enter git (`.gitignore` already covers them);

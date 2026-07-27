@@ -205,7 +205,14 @@ class QuizSubmission(BaseModel):
     # against that session's served-question set, not against whatever
     # subset the client chose to answer.
     session_id: int
-    answers: Dict[str, str]  # {question_id (str): given_answer}
+    # {question_id (str): given_answer}. Bounded (v0.1.20) because it was
+    # the only unbounded container in this schema module: answers outside
+    # the served set are ignored anyway, so nothing legitimate needs more
+    # entries than a quiz has questions. The real ceiling is the request
+    # body limit in middleware -- Pydantic runs after the body is read and
+    # decoded, so a per-field bound cannot save the memory, only reject
+    # what the memory was spent on.
+    answers: Dict[str, str] = Field(max_length=200)
 
 
 class QuizResult(BaseModel):

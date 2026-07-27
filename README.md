@@ -1,6 +1,6 @@
 # Lingua — AI Translation and Language Learning Platform
 
-**Version:** 0.1.19
+**Version:** 0.1.20
 
 A platform offering real-time translation and interactive language
 learning for multilingual users. Built as part of a university graduation
@@ -49,6 +49,7 @@ lives in [CHANGELOG.md](./CHANGELOG.md).
 | 0.1.17 | `/translate`'s language codes were the one user field with no validation — unbounded, stored verbatim, and colon-joined into the shared Redis cache key where two different pairs could collide. Validated against what the engine supports. |
 | 0.1.18 | Login took ~200 ms for a real account and ~5 ms for one that doesn't exist — a 40x enumeration oracle behind a message written to reveal nothing. Equalised to 1.00x; registration's remaining leak decided and documented rather than left as a recommendation. |
 | 0.1.19 | The badge check ran on every translation and counted by fetching every row to measure the list: `/translate` 60 ms → 4 ms, suggestions 230 ms → 14 ms. `/users/me/stats` still scales with the streak, and the two docs that called that negligible now carry the measurement. |
+| 0.1.20 | Three tables that only ever grew now get purged — with retention windows set past the point a row can still matter, since deleting a revoked refresh token early turns a session-theft alarm into a silent 401. Request bodies bounded too. |
 
 ## Quick start
 

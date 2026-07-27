@@ -82,6 +82,47 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+    """Refuses bodies larger than the configured ceiling (v0.1.20).
+
+    Nothing bounded the size of a request body. Most fields are
+    individually capped by their Pydantic schema, but the containers
+    weren't -- `QuizSubmission.answers` is a dict, and a 20,000-key one
+    was accepted and parsed. Pydantic validates *after* the body has been
+    read and JSON-decoded, so a per-field limit cannot help: by the time
+    it runs, the memory is already spent.
+
+    Checked against Content-Length, which a chunked request can simply
+    omit. That makes this a first line rather than a guarantee, and the
+    honest place for the guarantee is the reverse proxy in front (nginx
+    `client_max_body_size`, and the platform equivalents named in
+    DEPLOYMENT.md). It is still worth having here: it closes the ordinary
+    case, it travels with the app rather than with one deployment's
+    configuration, and it is the difference between a 413 and an
+    out-of-memory kill for anyone running this directly.
+    """
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        declared = request.headers.get("content-length")
+        if declared is not None:
+            try:
+                length = int(declared)
+            except ValueError:
+                return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length."})
+            if length > settings.max_request_body_bytes:
+                log_event(
+                    "request_body_too_large",
+                    path=request.url.path,
+                    bytes=length,
+                    limit=settings.max_request_body_bytes,
+                )
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": "Request body is too large."},
+                )
+        return await call_next(request)
+
+
 class GeneralRateLimitMiddleware(BaseHTTPMiddleware):
     """Per-IP request-rate backstop across the whole API (v0.0.8).
 
